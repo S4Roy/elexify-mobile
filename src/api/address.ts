@@ -1,0 +1,173 @@
+import { api } from './client';
+import { Page, record, string } from './discovery';
+
+const number = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+export type MasterRef = { id: number | null; name: string };
+
+export type Address = {
+  id: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  phoneCode: string;
+  phone: string;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string;
+  landMark: string;
+  city: MasterRef;
+  state: MasterRef;
+  country: MasterRef;
+  postcode: string;
+  addressType: string;
+  isDefault: boolean;
+};
+
+function parseMaster(value: unknown): MasterRef {
+  if (typeof value === 'number') {
+    return { id: value, name: '' };
+  }
+  const r = record(value);
+  return { id: number(r.id), name: string(r.name) };
+}
+
+function parseAddress(value: unknown): Address | null {
+  const a = record(value);
+  const id = string(a._id);
+  if (!id) {
+    return null;
+  }
+  const fullName = string(a.full_name);
+  const [firstName, ...rest] = fullName.trim().split(/\s+/);
+  return {
+    id,
+    fullName,
+    firstName: firstName || '',
+    lastName: rest.join(' '),
+    phoneCode: string(a.phone_code) || '91',
+    phone: string(a.phone),
+    email: string(a.email) || null,
+    addressLine1: string(a.address_line_1),
+    addressLine2: string(a.address_line_2),
+    landMark: string(a.land_mark),
+    city: parseMaster(a.city),
+    state: parseMaster(a.state),
+    country: parseMaster(a.country),
+    postcode: string(a.postcode),
+    addressType: string(a.address_type) || 'home',
+    isDefault: a.is_default === true,
+  };
+}
+
+export async function fetchAddresses(
+  page = 1,
+  signal?: AbortSignal,
+): Promise<Page<Address>> {
+  const limit = 20;
+  const res = await api.get('user/address/list', {
+    params: { page, limit },
+    signal,
+  });
+  const d = record(res.data?.data);
+  const docs = Array.isArray(d.docs) ? d.docs : [];
+  const items: Address[] = [];
+  for (const doc of docs) {
+    const address = parseAddress(doc);
+    if (address) {
+      items.push(address);
+    }
+  }
+  const total = number(d.totalDocs) ?? items.length;
+  const totalPages = number(d.totalPages);
+  const more =
+    d.hasNextPage === true ||
+    (d.hasNextPage !== false &&
+      (totalPages !== null ? page < totalPages : items.length === limit));
+  return {
+    items,
+    total,
+    nextPage: more && items.length > 0 ? page + 1 : undefined,
+  };
+}
+
+export type AddressInput = {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  landMark?: string;
+  city: number;
+  state: number;
+  country?: number;
+  postcode: string;
+  addressType?: string;
+  isDefault?: boolean;
+};
+
+function addressPayload(input: AddressInput) {
+  return {
+    first_name: input.firstName,
+    last_name: input.lastName,
+    phone_code: '91',
+    phone: input.phone,
+    ...(input.email ? { email: input.email } : {}),
+    address_line_1: input.addressLine1,
+    ...(input.addressLine2 ? { address_line_2: input.addressLine2 } : {}),
+    ...(input.landMark ? { land_mark: input.landMark } : {}),
+    city: input.city,
+    state: input.state,
+    country: input.country ?? 101,
+    postcode: input.postcode,
+    address_type: input.addressType || 'home',
+    is_default: input.isDefault ?? false,
+  };
+}
+
+export async function saveAddress(input: AddressInput): Promise<void> {
+  if (input.id) {
+    await api.put('user/address/edit', { _id: input.id, ...addressPayload(input) });
+  } else {
+    await api.post('user/address/add', addressPayload(input));
+  }
+}
+
+export async function setDefaultAddress(id: string): Promise<void> {
+  await api.put('user/address/edit', { _id: id, is_default: true });
+}
+
+export async function deleteAddress(id: string): Promise<void> {
+  await api.delete('user/address/delete', { data: { _id: id } });
+}
+
+export type PincodeResult = {
+  found: boolean;
+  serviceable: boolean;
+  city: MasterRef | null;
+  state: MasterRef | null;
+  country: MasterRef | null;
+};
+export async function lookupPincode(
+  postcode: string,
+  signal?: AbortSignal,
+): Promise<PincodeResult> {
+  const res = await api.get(`site/common/pincode/${encodeURIComponent(postcode)}`, {
+    signal,
+  });
+  const d = record(res.data?.data);
+  const master = (v: unknown): MasterRef | null => {
+    const m = parseMaster(v);
+    return m.id !== null ? m : null;
+  };
+  return {
+    found: d.found === true,
+    serviceable: d.serviceable === true,
+    city: master(d.city),
+    state: master(d.state),
+    country: master(d.country),
+  };
+}

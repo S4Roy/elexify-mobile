@@ -1,3 +1,5 @@
 module.exports = {
-  preset: 'react-native',
+  preset: 'jest-expo',
+  testMatch: ['<rootDir>/tests/**/*.test.ts'],
+  clearMocks: true,
 };

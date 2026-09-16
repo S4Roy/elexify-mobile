@@ -1,97 +1,45 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# elexify-mobile
 
-# Getting Started
+Elexify's Expo + React Native + TypeScript customer app. Phase 1 establishes the application foundation; catalog browsing, authentication UI and checkout are subsequent phases.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Setup
 
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
+Use Node 20.19.4 or newer and npm:
 
 ```sh
-# Using npm
+npm ci
+cp .env.example .env
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
+Set `EXPO_PUBLIC_API_URL` to an approved staging base URL ending in `/api/v1/`, and configure `EXPO_PUBLIC_X_API_KEY` if the backend requires it. Both values are public app configuration. Do not copy backend secrets or the website's entire `.env` file. Without a configured URL the shell runs without making API requests.
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+`npm start` opens Metro for a development build. Build/install with `npm run android` (JDK/Android SDK required) or `npm run ios` (full Xcode and CocoaPods required). Expo Go is not the target for payment/auth integration.
 
-### Android
+## Structure
+
+- `app/`: Expo Router root, four tabs and not-found route.
+- `src/features/foundation/`: initial read-only home preview.
+- `src/components/ui/`, `src/theme/`: Elexify primitives and Inter/teal tokens.
+- `src/api/`: configured Axios transport, normalized errors, catalog response adapter.
+- `src/platform/`, `src/stores/`: secure credentials, guest identity and local UI intent.
+- `src/providers/`: query cache, session bootstrap, connectivity and app focus.
+- `tests/`: foundation contract/session tests.
+
+Existing `src/screens`, `src/navigators`, Redux/Saga and helper files are retained as migration references and are not imported by the Expo entry. Their older implementation is excluded from the foundation typecheck/lint/test scope; it is not certified by these checks. The old `__tests__/App.test.tsx` belongs to that implementation.
+
+## Checks
 
 ```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+npm run typecheck
+npm run lint
+npm test
+npx expo install --check
+npx expo export --platform android --platform ios --output-dir /private/tmp/elexify-mobile-export
 ```
 
-### iOS
+The app currently renders Home, Categories, Cart and Account. Only Home makes an optional read-only product-list request. Other tabs clearly indicate upcoming functionality. No demo checkout or unsupported login is exposed.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+Credentials use SecureStore. Guest IDs use AsyncStorage. Auth transitions cancel and clear query data and reset local shopping intent. No refresh-token contract is assumed. Payment adapters and persisted checkout idempotency will be implemented in Phase 5.
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+See [Phase 0](docs/PHASE-0-DISCOVERY.md) and [Phase 1](docs/PHASE-1-FOUNDATION.md) for findings and validation limits.
