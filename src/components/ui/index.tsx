@@ -31,7 +31,8 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        (pressed || disabled) && styles.dim,
+        pressed && styles.pressed,
+        disabled && styles.disabled,
       ]}
     >
       <AppText style={styles.buttonText}>{label}</AppText>
@@ -106,8 +107,8 @@ export const styles = StyleSheet.create({
   },
   screen: { flex: 1, backgroundColor: theme.colors.background },
   content: { padding: 24, gap: 20, flexGrow: 1 },
-  title: { fontFamily: theme.fonts.bold, fontSize: 30, lineHeight: 38 },
-  heading: { fontFamily: theme.fonts.bold, fontSize: 20, lineHeight: 28 },
+  title: { fontFamily: theme.fonts.semibold, fontSize: 24, lineHeight: 32 },
+  heading: { fontFamily: theme.fonts.semibold, fontSize: 20, lineHeight: 28 },
   secondary: { color: theme.colors.secondary },
   card: {
     padding: 20,
@@ -121,13 +122,14 @@ export const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: theme.radius.button,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.primary,
   },
   buttonText: { color: '#FFFFFF', fontFamily: theme.fonts.medium },
-  dim: { opacity: 0.6 },
+  pressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
+  disabled: { opacity: 0.5 },
   skeleton: {
     height: 24,
     borderRadius: 8,

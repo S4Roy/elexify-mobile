@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import RazorpayCheckout from 'react-native-razorpay';
 import { AppText, Button, Feedback } from '../../components/ui';
@@ -94,7 +94,7 @@ export default function CheckoutScreen() {
   return (
     <View style={shop.page}>
       <ShopHeader title="Checkout" back />
-      <View style={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <AppText style={shop.heading}>Deliver to</AppText>
         <QueryState
           pending={addresses.isPending}
@@ -131,7 +131,7 @@ export default function CheckoutScreen() {
         )}
 
         <AppText style={shop.heading}>Payment method</AppText>
-        <View style={shop.row}>
+        <View style={styles.paymentChoices}>
           <Chip
             label="Pay online (Razorpay)"
             selected={paymentMethod === 'razorpay'}
@@ -182,12 +182,13 @@ export default function CheckoutScreen() {
           disabled={!addressId || !data || data.items.length === 0 || !!codBlocked || placing}
           onPress={submit}
         />
-      </View>
+      </ScrollView>
     </View>
   );
 }
 const styles = StyleSheet.create({
-  body: { padding: 16, gap: 12 },
+  body: { padding: 16, gap: 12, paddingBottom: 32 },
+  paymentChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   summary: { gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 12 },
   error: { color: theme.colors.danger },
 });

@@ -2,9 +2,6 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
-import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
-import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { AppProviders } from '../src/providers/AppProviders';
@@ -12,9 +9,10 @@ import { theme } from '../src/theme';
 export { ErrorBoundary } from 'expo-router';
 export default function RootLayout() {
   const [loaded, error] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_700Bold,
+    Poppins_400Regular: require('../src/assets/fonts/Poppins-Regular.ttf'),
+    Poppins_500Medium: require('../src/assets/fonts/Poppins-Medium.ttf'),
+    Poppins_600SemiBold: require('../src/assets/fonts/Poppins-SemiBold.ttf'),
+    Poppins_700Bold: require('../src/assets/fonts/Poppins-Bold.ttf'),
   });
   if (error) {
     throw error;

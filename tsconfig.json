@@ -14,8 +14,6 @@
     "src/providers/**/*.tsx",
     "tests/**/*.ts",
     "App.tsx",
-    "expo-env.d.ts",
-    ".expo/types/**/*.ts",
     "src/features/**/*.ts",
     "src/features/**/*.tsx",
     "src/components/shop/**/*.tsx",

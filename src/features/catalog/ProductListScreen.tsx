@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { FlatList, Modal, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppText, Button, Feedback } from '../../components/ui';
+import { AppText, Feedback } from '../../components/ui';
 import {
+  BottomSheet,
   Chip,
-  IconButton,
   ProductCard,
+  ProductGridSkeleton,
+  ScrollShadow,
   ShopHeader,
   shop,
 } from '../../components/shop';
@@ -47,6 +48,7 @@ function ProductResults({
   const [sort, setSort] = useState(first(route.sort) || 'newest');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
   const search = first(route.search_key);
   const collection = useMemo(
     () =>
@@ -89,18 +91,20 @@ function ProductResults({
         }
         back
       />
-      <View>
+      <ScrollShadow scrollY={scrollY} style={styles.toolbar}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.controls}
         >
           <Chip
+            icon="options-outline"
             label={`Filter${count ? ` (${count})` : ''}`}
             selected={count > 0}
             onPress={() => setFilterOpen(true)}
           />
           <Chip
+            icon="swap-vertical-outline"
             label={sorts.find(s => s.id === sort)?.label ?? 'Sort'}
             onPress={() => setSortOpen(true)}
           />
@@ -112,8 +116,8 @@ function ProductResults({
             }
           />
         </ScrollView>
-      </View>
-      <FlatList
+      </ScrollShadow>
+      <Animated.FlatList
         key={JSON.stringify(params)}
         data={items}
         numColumns={2}
@@ -121,14 +125,29 @@ function ProductResults({
         contentContainerStyle={styles.list}
         columnWrapperStyle={styles.columns}
         keyboardShouldPersistTaps="handled"
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false },
+        )}
+        scrollEventThrottle={16}
         refreshing={products.isRefetching && !products.isFetchingNextPage}
         onRefresh={() => {
           products.refetch().catch(() => undefined);
         }}
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          if (products.hasNextPage && !products.isFetchingNextPage) {
+            products.fetchNextPage().catch(() => undefined);
+          }
+        }}
         ListHeaderComponent={
           <View style={styles.heading}>
             {count > 0 && (
-              <View style={styles.active}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.active}
+              >
                 {filters.categories.map(category => (
                   <Chip
                     key={category}
@@ -155,7 +174,7 @@ function ProductResults({
                   label="Clear filters"
                   onPress={() => setFilters(emptyFilters())}
                 />
-              </View>
+              </ScrollView>
             )}
             <QueryState
               pending={products.isPending}
@@ -168,6 +187,7 @@ function ProductResults({
               retry={() => {
                 products.refetch().catch(() => undefined);
               }}
+              skeleton={<ProductGridSkeleton />}
             />
             {products.data && (
               <AppText style={shop.muted}>
@@ -200,18 +220,8 @@ function ProductResults({
                 }}
               />
             )}
-            {products.hasNextPage && (
-              <Button
-                label={
-                  products.isFetchingNextPage
-                    ? 'Loading…'
-                    : 'Load more products'
-                }
-                disabled={products.isFetchingNextPage}
-                onPress={() => {
-                  products.fetchNextPage().catch(() => undefined);
-                }}
-              />
+            {products.isFetchingNextPage && (
+              <AppText style={shop.muted}>Loading more products…</AppText>
             )}
           </View>
         }
@@ -220,50 +230,38 @@ function ProductResults({
         <FilterSheet
           initial={filters}
           onClose={() => setFilterOpen(false)}
-          onApply={next => {
-            setFilters(next);
-            setFilterOpen(false);
-          }}
+          onApply={next => setFilters(next)}
         />
       )}
-      <Modal
-        visible={sortOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSortOpen(false)}
-      >
-        <SafeAreaView style={shop.page}>
-          <View style={shop.padded}>
-            <View style={shop.between}>
-              <AppText style={shop.heading}>Sort products</AppText>
-              <IconButton
-                name="close"
-                label="Close sorting"
-                onPress={() => setSortOpen(false)}
-              />
+      {sortOpen && (
+        <BottomSheet title="Sort products" onClose={() => setSortOpen(false)}>
+          {close => (
+            <View style={styles.sortSheet}>
+              {sorts.map(option => (
+                <Chip
+                  key={option.id}
+                  label={option.label}
+                  selected={sort === option.id}
+                  onPress={() => {
+                    setSort(option.id);
+                    close();
+                  }}
+                />
+              ))}
             </View>
-            {sorts.map(option => (
-              <Chip
-                key={option.id}
-                label={option.label}
-                selected={sort === option.id}
-                onPress={() => {
-                  setSort(option.id);
-                  setSortOpen(false);
-                }}
-              />
-            ))}
-          </View>
-        </SafeAreaView>
-      </Modal>
+          )}
+        </BottomSheet>
+      )}
     </View>
   );
 }
 const styles = StyleSheet.create({
-  controls: { padding: 16, gap: 10 },
+  toolbar: { paddingTop: 12, paddingBottom: 10, gap: 10 },
+  controls: { paddingHorizontal: 16, gap: 10 },
   list: { paddingHorizontal: 16, paddingBottom: 24, gap: 12 },
   columns: { gap: 10 },
   tile: { flex: 1, maxWidth: '50%' },
   heading: { gap: 12, marginBottom: 12 },
-  active: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  active: { flexDirection: 'row', gap: 8, paddingRight: 4 },
+  sortSheet: { padding: 20, gap: 10 },
 });

@@ -6,11 +6,14 @@ export function QueryState({
   error,
   paused,
   retry,
+  skeleton,
 }: {
   pending: boolean;
   error: Error | null;
   paused?: boolean;
   retry: () => void;
+  /** Custom placeholder shown while pending (e.g. a grid-shaped skeleton). Defaults to the generic bar Skeleton. */
+  skeleton?: React.ReactNode;
 }) {
   if (!apiConfig.baseUrl) {
     return (
@@ -30,14 +33,15 @@ export function QueryState({
     );
   }
   if (pending) {
-    return paused ? (
-      <Feedback
-        title="Waiting for connection"
-        message="We’ll load the store when you’re back online."
-      />
-    ) : (
-      <Skeleton />
-    );
+    if (paused) {
+      return (
+        <Feedback
+          title="Waiting for connection"
+          message="We’ll load the store when you’re back online."
+        />
+      );
+    }
+    return <>{skeleton ?? <Skeleton />}</>;
   }
   return null;
 }

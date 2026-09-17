@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { AppText, Button } from '../../components/ui';
 import { ShopHeader, shop } from '../../components/shop';
@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [lastName, setLastName] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
   const sendOtp = useSendOtp();
   const verifyOtp = useVerifyOtp();
   const googleSignIn = useGoogleSignIn();
@@ -68,7 +69,8 @@ export default function LoginScreen() {
   return (
     <View style={shop.page}>
       <ShopHeader title="Sign in" back />
-      <View style={styles.body}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {step === 'identity' ? (
           <>
             <AppText style={shop.heading}>Enter your mobile number</AppText>
@@ -80,11 +82,13 @@ export default function LoginScreen() {
                 maxLength={10}
                 value={mobile}
                 onChangeText={v => setMobile(v.replace(/\D/g, ''))}
+                onBlur={() => setTouched(true)}
                 placeholder="10-digit mobile number"
                 placeholderTextColor={theme.colors.secondary}
-                style={styles.input}
+                style={[styles.input, touched && !mobilePattern.test(mobile) && styles.invalid]}
               />
             </View>
+            {touched && !mobilePattern.test(mobile) && <AppText style={styles.fieldError}>Enter a valid 10-digit mobile number.</AppText>}
             {!!error && (
               <AppText accessibilityRole="alert" style={styles.error}>
                 {error}
@@ -183,11 +187,13 @@ export default function LoginScreen() {
             />
           </>
         )}
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   body: { padding: 16, gap: 14 },
   mobileRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   prefix: { fontFamily: theme.fonts.medium, fontSize: 16 },
@@ -213,5 +219,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   error: { color: theme.colors.danger },
+  invalid: { borderColor: theme.colors.danger, borderWidth: 1.5 },
+  fieldError: { color: theme.colors.danger, fontSize: 13 },
   divider: { textAlign: 'center', color: theme.colors.secondary },
 });

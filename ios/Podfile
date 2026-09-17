@@ -49,5 +49,30 @@ target 'Elexify' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # A few transitive pods' auto-generated privacy-manifest resource-bundle
+    # targets ship a hardcoded old deployment target (as low as 9.0) that
+    # react_native_post_install doesn't touch. Newer Xcode SDKs reject those
+    # outright, so clamp every target up to the project minimum.
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if deployment_target && deployment_target.to_f < 15.1
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        end
+
+        # fmt (pulled in via Folly) uses C++20 `consteval` to validate format
+        # strings at compile time. Xcode 26.4+/27's Clang enforces consteval
+        # call-site rules more strictly than fmt 11.0.2 expects, so its
+        # FMT_STRING() macro fails to compile under C++20. Building fmt under
+        # C++17 instead skips that code path entirely (consteval doesn't
+        # exist pre-C++20) and falls back to fmt's runtime format-string
+        # validation, which is all this pinned version needs.
+        # https://github.com/facebook/react-native/issues/55601
+        if target.name == 'fmt'
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+        end
+      end
+    end
   end
 end

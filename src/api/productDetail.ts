@@ -27,6 +27,7 @@ export type Variation = {
   askForPrice: boolean;
   selections: { attributeId: string; valueId: string }[];
 };
+export type QuantityDiscount = { minQuantity: number; discountPercent: number };
 export type ProductDetail = {
   id: string;
   slug: string;
@@ -43,6 +44,7 @@ export type ProductDetail = {
   stockQuantity: number | null;
   askForPrice: boolean;
   inWishlist: boolean;
+  quantityDiscounts: QuantityDiscount[];
   attributes: ProductAttribute[];
   variations: Variation[];
 };
@@ -100,6 +102,7 @@ export function parseProductDetail(value: unknown): ProductDetail {
   const categories = Array.isArray(p.categories) ? p.categories : [];
   const attributes = Array.isArray(p.attributes) ? p.attributes : [];
   const variations = Array.isArray(p.variations) ? p.variations : [];
+  const quantityDiscounts = Array.isArray(p.quantity_discounts) ? p.quantity_discounts : [];
   return {
     id: string(p._id),
     slug: string(p.slug),
@@ -119,6 +122,14 @@ export function parseProductDetail(value: unknown): ProductDetail {
     stockQuantity: num(p.stock_quantity),
     askForPrice: p.ask_for_price === true,
     inWishlist: !!p.wishlist,
+    quantityDiscounts: quantityDiscounts
+      .map(record)
+      .map(t => ({
+        minQuantity: num(t.min_quantity) ?? 0,
+        discountPercent: num(t.discount_percent) ?? 0,
+      }))
+      .filter(t => t.minQuantity > 0 && t.discountPercent > 0)
+      .sort((a, b) => a.minQuantity - b.minQuantity),
     attributes: attributes.map(parseAttribute).filter(a => a.id && a.values.length > 0),
     variations: variations.map(parseVariation).filter(v => v.id),
   };

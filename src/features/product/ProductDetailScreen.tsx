@@ -1,15 +1,36 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Button, Feedback } from '../../components/ui';
-import { Chip, ShopHeader, StoreImage, WishlistHeart, money, shop } from '../../components/shop';
+import {
+  AddToCartControl,
+  Chip,
+  ShopHeader,
+  StarRating,
+  StoreImage,
+  WishlistHeart,
+  money,
+  shop,
+} from '../../components/shop';
 import { openWebsite, websiteProductUrl } from '../catalog/links';
 import { QueryState } from '../catalog/QueryState';
 import { plainText } from '../../utils/html';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
-import { useCart, useCartMutation } from '../cart/hooks';
+import { useRecentlyViewed } from '../../stores/recentlyViewed';
+import { useCart } from '../cart/hooks';
+import type { QuantityDiscount } from '../../api/productDetail';
 import {
   useDeliveryCheck,
   useProductDetail,
@@ -41,6 +62,74 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
+function Accordion({
+  title,
+  defaultOpen = true,
+  children,
+}: React.PropsWithChildren<{ title: string; defaultOpen?: boolean }>) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <View style={styles.section}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(o => !o)}
+        style={styles.accordionHeader}
+      >
+        <AppText style={shop.heading}>{title}</AppText>
+        <Ionicons
+          name={open ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={theme.colors.secondary}
+        />
+      </Pressable>
+      {open && <View style={styles.accordionBody}>{children}</View>}
+    </View>
+  );
+}
+
+function QuantityDiscountList({
+  tiers,
+  activeIndex,
+}: {
+  tiers: QuantityDiscount[];
+  activeIndex: number;
+}) {
+  return (
+    <View style={styles.tierList}>
+      {tiers.map((tier, index) => {
+        const next = tiers[index + 1];
+        const label = next
+          ? `${tier.minQuantity} to ${next.minQuantity - 1}`
+          : `${tier.minQuantity}+`;
+        const isActive = index === activeIndex;
+        return (
+          <View
+            key={tier.minQuantity}
+            style={[styles.tierRow, isActive && styles.tierRowActive]}
+          >
+            <View style={[styles.tierDot, isActive && styles.tierDotActive]} />
+            <View style={styles.flex}>
+              <AppText style={isActive ? styles.tierTextActive : styles.tierText}>
+                Buy from {label} items and get{' '}
+                <AppText style={styles.tierPercent}>{tier.discountPercent}% OFF</AppText>
+              </AppText>
+              <AppText style={styles.tierHint}>on each product</AppText>
+              {isActive && (
+                <View style={styles.tierAppliedBadge}>
+                  <AppText style={styles.tierAppliedText}>
+                    Applied at your current quantity
+                  </AppText>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value ?? '';
 
@@ -54,6 +143,9 @@ export default function ProductDetailScreen() {
   const [activeImage, setActiveImage] = useState(0);
   const [postcode, setPostcode] = useState('');
   const delivery = useDeliveryCheck();
+  const insets = useSafeAreaInsets();
+  const { width: winWidth } = useWindowDimensions();
+  const heroScrollRef = useRef<ScrollView>(null);
   const data = product.data;
 
   if (data && !seeded) {
@@ -76,11 +168,37 @@ export default function ProductDetailScreen() {
   const askForPrice = resolved ? resolved.askForPrice : data?.askForPrice ?? false;
   const inStock = stockQuantity === null || stockQuantity > 0;
   const canBuy = !requiresVariation || !!variation;
+  const hasDiscount =
+    !askForPrice && regularPrice !== null && price !== null && regularPrice > price;
+  const discountPercent = hasDiscount
+    ? Math.round(((regularPrice! - price!) / regularPrice!) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (data?.id) {
+      useRecentlyViewed.getState().add(data.id);
+    }
+  }, [data?.id]);
+
+  useEffect(() => {
+    setActiveImage(0);
+    heroScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [resolved?.id]);
 
   const specs = useSpecifications(slug);
   const reviews = useReviews(data?.id, resolved?.id);
   const cart = useCart();
-  const cartMutation = useCartMutation();
+  const cartItem = data
+    ? cart.data?.items.find(
+        item => item.productId === data.id && item.variationId === resolved?.id,
+      )
+    : undefined;
+  const quantityDiscounts = data?.quantityDiscounts ?? [];
+  const currentQty = cartItem?.quantity ?? 1;
+  const activeDiscountTierIndex = quantityDiscounts.findIndex((tier, index) => {
+    const next = quantityDiscounts[index + 1];
+    return currentQty >= tier.minQuantity && (!next || currentQty < next.minQuantity);
+  });
   const isAuthenticated = useSession(s => s.status === 'authenticated');
   const [myRating, setMyRating] = useState(0);
   const [myReview, setMyReview] = useState('');
@@ -93,25 +211,24 @@ export default function ProductDetailScreen() {
     return websiteProductUrl({ slug: data.slug, variationId: resolved?.id });
   }, [data, resolved]);
 
-  const addToCart = () => {
-    if (!data) {
-      return;
-    }
-    const variationId = resolved?.id;
-    const existing = cart.data?.items.find(
-      item => item.productId === data.id && item.variationId === variationId,
-    );
-    cartMutation.mutate({
-      productId: data.id,
-      variationId,
-      quantity: (existing?.quantity ?? 0) + 1,
-    });
+  const onHeroScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / winWidth);
+    setActiveImage(index);
+  };
+
+  const goToImage = (index: number) => {
+    setActiveImage(index);
+    heroScrollRef.current?.scrollTo({ x: index * winWidth, animated: true });
   };
 
   return (
-    <View style={shop.page}>
+    <View style={[shop.page, styles.page]}>
       <ShopHeader title={data?.name || 'Product'} back />
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <QueryState
           pending={product.isPending}
           error={product.error}
@@ -122,20 +239,51 @@ export default function ProductDetailScreen() {
         />
         {data && (
           <>
-            <StoreImage
-              uri={images[activeImage] ?? images[0]}
-              label={data.name}
-              style={styles.hero}
-            />
-            {images.length > 1 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbRow}>
-                {images.map((uri, index) => (
-                  <Chip
-                    key={uri + index}
-                    label={String(index + 1)}
-                    selected={index === activeImage}
-                    onPress={() => setActiveImage(index)}
+            <View style={styles.heroWrap}>
+              <ScrollView
+                ref={heroScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={onHeroScrollEnd}
+              >
+                {(images.length ? images : [undefined]).map((uri, index) => (
+                  <StoreImage
+                    key={(uri ?? 'placeholder') + index}
+                    uri={uri}
+                    label={`${data.name} photo ${index + 1}`}
+                    style={[styles.hero, { width: winWidth }]}
                   />
+                ))}
+              </ScrollView>
+              {images.length > 1 && (
+                <View style={styles.dotsRow} pointerEvents="none">
+                  {images.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[styles.dot, index === activeImage && styles.dotActive]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+            {images.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.thumbRow}
+              >
+                {images.map((uri, index) => (
+                  <Pressable
+                    key={uri + index}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View photo ${index + 1}`}
+                    accessibilityState={{ selected: index === activeImage }}
+                    onPress={() => goToImage(index)}
+                    style={[styles.thumb, index === activeImage && styles.thumbActive]}
+                  >
+                    <StoreImage uri={uri} label="" style={styles.thumbImage} />
+                  </Pressable>
                 ))}
               </ScrollView>
             )}
@@ -160,28 +308,60 @@ export default function ProductDetailScreen() {
                 />
               </View>
               {data.rating !== null && data.rating > 0 && (
-                <AppText style={shop.muted}>
-                  ★ {data.rating.toFixed(1)} · {data.totalReviews} review
-                  {data.totalReviews === 1 ? '' : 's'}
-                </AppText>
+                <View style={[shop.row, styles.ratingRow]}>
+                  <StarRating value={data.rating} size={15} />
+                  <AppText style={shop.muted}>
+                    {data.rating.toFixed(1)} · {data.totalReviews} review
+                    {data.totalReviews === 1 ? '' : 's'}
+                  </AppText>
+                </View>
               )}
               {!!data.sku && <AppText style={shop.muted}>SKU: {data.sku}</AppText>}
             </View>
 
-            <View style={[shop.row, styles.section]}>
+            <View style={styles.section}>
               {askForPrice ? (
                 <AppText style={styles.price}>Contact us for pricing</AppText>
               ) : (
                 <>
-                  {regularPrice !== null && price !== null && regularPrice > price && (
-                    <AppText style={shop.was}>{money(regularPrice)}</AppText>
+                  <View style={[shop.row, styles.priceRow]}>
+                    <AppText style={styles.price}>
+                      {price === null ? 'Price unavailable' : money(price)}
+                    </AppText>
+                    {hasDiscount && (
+                      <AppText style={styles.wasLarge}>{money(regularPrice!)}</AppText>
+                    )}
+                    {hasDiscount && (
+                      <View style={styles.discountBadge}>
+                        <AppText style={styles.discountText}>-{discountPercent}%</AppText>
+                      </View>
+                    )}
+                  </View>
+                  {hasDiscount && (
+                    <AppText style={styles.savings}>
+                      You save {money(regularPrice! - price!)} ({discountPercent}%)
+                    </AppText>
                   )}
-                  <AppText style={styles.price}>
-                    {price === null ? 'Price unavailable' : money(price)}
-                  </AppText>
                 </>
               )}
+              <AppText style={inStock ? shop.muted : styles.outOfStock}>
+                {!canBuy
+                  ? 'Select all options to check availability.'
+                  : inStock
+                  ? 'In stock'
+                  : 'Out of stock'}
+              </AppText>
             </View>
+
+            {!askForPrice && quantityDiscounts.length > 0 && (
+              <View style={styles.section}>
+                <AppText style={shop.heading}>🔥 Buy More Save More!</AppText>
+                <QuantityDiscountList
+                  tiers={quantityDiscounts}
+                  activeIndex={activeDiscountTierIndex}
+                />
+              </View>
+            )}
 
             {data.attributes.map(attribute => (
               <View key={attribute.id} style={styles.section}>
@@ -200,39 +380,6 @@ export default function ProductDetailScreen() {
                 </View>
               </View>
             ))}
-
-            <View style={styles.section}>
-              <AppText style={inStock ? shop.muted : styles.outOfStock}>
-                {!canBuy
-                  ? 'Select all options to check availability.'
-                  : inStock
-                  ? 'In stock'
-                  : 'Out of stock'}
-              </AppText>
-              <View style={shop.row}>
-                <View style={styles.flex}>
-                  <Button
-                    label={cartMutation.isPending ? 'Adding…' : 'Add to cart'}
-                    disabled={!canBuy || !inStock || cartMutation.isPending}
-                    onPress={addToCart}
-                  />
-                </View>
-                <View style={styles.flex}>
-                  <Button
-                    label="Buy now"
-                    disabled={!canBuy || !inStock}
-                    onPress={() => buyUrl && openWebsite(buyUrl)}
-                  />
-                </View>
-              </View>
-              {cartMutation.isError && (
-                <AppText style={styles.outOfStock}>{cartMutation.error.message}</AppText>
-              )}
-              {cartMutation.isSuccess && (
-                <AppText style={shop.muted}>Added to your cart.</AppText>
-              )}
-              <AppText style={shop.muted}>Checkout completes on our website.</AppText>
-            </View>
 
             <View style={styles.section}>
               <AppText style={shop.heading}>Delivery</AppText>
@@ -275,15 +422,13 @@ export default function ProductDetailScreen() {
             </View>
 
             {!!data.description && (
-              <View style={styles.section}>
-                <AppText style={shop.heading}>Description</AppText>
+              <Accordion title="Description">
                 <AppText>{plainText(data.description)}</AppText>
-              </View>
+              </Accordion>
             )}
 
             {specs.data && specs.data.length > 0 && (
-              <View style={styles.section}>
-                <AppText style={shop.heading}>Specifications</AppText>
+              <Accordion title="Specifications">
                 {specs.data.map((spec, index) => (
                   <View
                     key={spec.id}
@@ -293,7 +438,7 @@ export default function ProductDetailScreen() {
                     <AppText style={styles.specValue}>{spec.value}</AppText>
                   </View>
                 ))}
-              </View>
+              </Accordion>
             )}
 
             <View style={styles.section}>
@@ -363,18 +508,132 @@ export default function ProductDetailScreen() {
           />
         )}
       </ScrollView>
+      {data && (
+        <View style={[styles.stickyBar, { paddingBottom: Math.max(12, insets.bottom) }]}>
+          {askForPrice ? (
+            <View style={styles.flex}>
+              <Button label="Contact us for pricing" onPress={() => buyUrl && openWebsite(buyUrl)} />
+            </View>
+          ) : !canBuy ? (
+            <View style={styles.flex}>
+              <Button label="Select options above" disabled onPress={() => undefined} />
+            </View>
+          ) : !inStock ? (
+            <View style={styles.flex}>
+              <Button label="Out of stock" disabled onPress={() => undefined} />
+            </View>
+          ) : (
+            <>
+              <AddToCartControl
+                product={{ id: data.id, variationId: resolved?.id, name: data.name, inStock }}
+                variant="full"
+              />
+              <View style={styles.flex}>
+                <Button label="Buy now" onPress={() => buyUrl && openWebsite(buyUrl)} />
+              </View>
+            </>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 const styles = StyleSheet.create({
-  body: { paddingBottom: 32, gap: 4 },
+  page: { backgroundColor: '#F4F5F7' },
+  body: { paddingBottom: 120, gap: 4 },
   flex: { flex: 1 },
-  hero: { width: '100%', aspectRatio: 1, backgroundColor: '#F0F1F3' },
+  heroWrap: { position: 'relative', backgroundColor: '#FFFFFF' },
+  hero: { aspectRatio: 1, backgroundColor: '#F0F1F3' },
+  dotsRow: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  dotActive: { backgroundColor: theme.colors.primary, width: 16 },
   thumbRow: { padding: 12, gap: 8 },
-  section: { padding: 16, gap: 10 },
+  thumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+  },
+  thumbActive: { borderColor: theme.colors.primary },
+  thumbImage: { width: '100%', height: '100%' },
+  section: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    padding: 16,
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
   titleRow: { alignItems: 'flex-start' },
   title: { fontFamily: theme.fonts.bold, fontSize: 20, lineHeight: 27 },
-  price: { color: theme.colors.primary, fontFamily: theme.fonts.bold, fontSize: 22 },
+  ratingRow: { alignItems: 'center', gap: 8 },
+  priceRow: { alignItems: 'center', gap: 10 },
+  price: { color: theme.colors.primary, fontFamily: theme.fonts.bold, fontSize: 24 },
+  wasLarge: { color: theme.colors.secondary, textDecorationLine: 'line-through', fontSize: 16 },
+  savings: { color: theme.colors.primary, fontFamily: theme.fonts.medium, fontSize: 13 },
+  discountBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: theme.colors.danger,
+  },
+  discountText: {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    lineHeight: 14,
+  },
+  tierList: { gap: 4 },
+  tierRow: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 8,
+    borderRadius: 10,
+  },
+  tierRowActive: { backgroundColor: theme.colors.primaryLight },
+  tierDot: {
+    marginTop: 3,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  tierDotActive: { backgroundColor: theme.colors.primary },
+  tierText: { fontSize: 12, lineHeight: 18, color: theme.colors.secondary },
+  tierTextActive: { fontSize: 12, lineHeight: 18, color: theme.colors.text },
+  tierPercent: { fontFamily: theme.fonts.semibold, fontSize: 12, color: theme.colors.text },
+  tierHint: { fontSize: 11, color: theme.colors.secondary, marginTop: 1 },
+  tierAppliedBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  tierAppliedText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 10,
+  },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   outOfStock: { color: theme.colors.danger },
   pincode: {
@@ -388,8 +647,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
   },
+  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  accordionBody: { gap: 10 },
   specRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, gap: 12 },
-  specRowAlt: { backgroundColor: theme.colors.background, borderRadius: 8 },
+  specRowAlt: { backgroundColor: '#F4F5F7', borderRadius: 8 },
   specLabel: { color: theme.colors.secondary, flex: 1 },
   specValue: { flex: 1, textAlign: 'right' },
   review: { gap: 4, paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
@@ -410,5 +671,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
     textAlignVertical: 'top',
+  },
+  stickyBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
   },
 });

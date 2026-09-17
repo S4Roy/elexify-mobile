@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,6 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AppText, Button } from '../../components/ui';
 import {
-  CategoryTile,
   ProductCard,
   StoreImage,
   shop,
@@ -90,6 +90,8 @@ function Countdown({ end }: { end: string }) {
   );
 }
 function ProductRail({ section }: { section: HomeSection }) {
+  const { width } = useWindowDimensions();
+  const scale = width / 440;
   const identity = useIdentity();
   const params = resolvedQuery(section.config.resolved_query, 'product');
   const query = useQuery({
@@ -113,8 +115,8 @@ function ProductRail({ section }: { section: HomeSection }) {
     return null;
   }
   return (
-    <View style={[styles.section, sale ? styles.sale : undefined]}>
-      <SectionHeading section={section} onViewAll={viewAll} />
+    <View style={[styles.section, sale && styles.sale, sale && { paddingTop: 24 * scale, paddingBottom: 24 * scale, gap: 20 * scale }]}>
+      <SectionHeading section={sale ? { ...section, title: 'Flash Sale' } : section} onViewAll={sale ? undefined : viewAll} />
       {!!end && <Countdown end={end} />}
       <QueryState
         pending={query.isPending}
@@ -127,10 +129,10 @@ function ProductRail({ section }: { section: HomeSection }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
+        contentContainerStyle={[styles.rail, { gap: 15 * scale }]}
       >
         {query.data?.items.map(product => (
-          <View key={product.key} style={styles.product}>
+          <View key={product.key} style={[styles.product, { width: 232 * scale }]}>
             <ProductCard product={product} />
           </View>
         ))}
@@ -139,6 +141,8 @@ function ProductRail({ section }: { section: HomeSection }) {
   );
 }
 function CategoryRail({ section }: { section: HomeSection }) {
+  const { width } = useWindowDimensions();
+  const scale = width / 440;
   const identity = useIdentity();
   const params = resolvedQuery(section.config.resolved_query, 'category');
   const query = useQuery({
@@ -149,10 +153,9 @@ function CategoryRail({ section }: { section: HomeSection }) {
     return null;
   }
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, { paddingTop: 20 * scale, paddingBottom: 35 * scale, paddingHorizontal: 16 * scale, gap: 14 * scale }]}>
       <SectionHeading
-        section={section}
-        onViewAll={() => router.push('/categories')}
+        section={{ ...section, title: 'Popular Categories' }}
       />
       <QueryState
         pending={query.isPending}
@@ -165,11 +168,16 @@ function CategoryRail({ section }: { section: HomeSection }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
+        contentContainerStyle={[styles.rail, { gap: 9 * scale }]}
       >
         {query.data?.items.map(category => (
-          <View key={category.id} style={styles.category}>
-            <CategoryTile category={category} />
+          <View key={category.id} style={[styles.category, { width: 110 * scale }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={category.name}
+              onPress={() => router.push({ pathname: '/products', params: { category: category.slug, title: category.name } })}
+              style={styles.categoryButton}>
+              <StoreImage uri={category.image} label={category.name} style={[styles.categoryImage, { width: 75 * scale, height: 75 * scale, borderRadius: 37.5 * scale }]} />
+              <AppText numberOfLines={1} style={[styles.categoryName, { width: 110 * scale }]}>{category.name}</AppText>
+            </Pressable>
           </View>
         ))}
       </ScrollView>
@@ -178,29 +186,43 @@ function CategoryRail({ section }: { section: HomeSection }) {
 }
 function Hero({ section }: { section: HomeSection }) {
   const { width } = useWindowDimensions();
-  const cardWidth = Math.min(width - 44, 560);
+  const scale = width / 440;
+  const cardWidth = 375 * scale;
   const [active, setActive] = useState(0);
+  const rail = useRef<ScrollView>(null);
   const slides = (
     Array.isArray(section.config.slides) ? section.config.slides : []
   )
     .map(record)
     .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+  const slideStep = cardWidth + 17 * scale;
+  const goToSlide = useCallback((index: number) => {
+    const next = Math.max(0, Math.min(index, slides.length - 1));
+    rail.current?.scrollTo({ x: next * slideStep, animated: true });
+    setActive(next);
+  }, [slideStep, slides.length]);
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const timer = setTimeout(() => goToSlide((active + 1) % slides.length), 5500);
+    return () => clearTimeout(timer);
+  }, [active, goToSlide, slides.length]);
   if (!slides.length) {
     return null;
   }
   return (
-    <View style={styles.heroSection}>
+    <View style={[styles.heroSection, { paddingTop: 22 * scale }]}>
       <ScrollView
+        ref={rail}
         horizontal
-        snapToInterval={cardWidth + 12}
+        scrollEnabled={slides.length > 1}
+        nestedScrollEnabled
+        snapToOffsets={slides.map((_, index) => index * slideStep)}
         decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.heroRail}
-        onMomentumScrollEnd={e =>
-          setActive(
-            Math.round(e.nativeEvent.contentOffset.x / (cardWidth + 12)),
-          )
-        }
+        directionalLockEnabled
+        contentContainerStyle={[styles.heroRail, { paddingLeft: 17 * scale, paddingRight: width - cardWidth - 17 * scale, gap: 17 * scale }]}
+        onScrollEndDrag={e => setActive(Math.max(0, Math.min(slides.length - 1, Math.round(e.nativeEvent.contentOffset.x / slideStep))))}
+        onMomentumScrollEnd={e => setActive(Math.max(0, Math.min(slides.length - 1, Math.round(e.nativeEvent.contentOffset.x / slideStep))))}
       >
         {slides.map((slide, index) => {
           const primary = record(slide.primary_cta);
@@ -208,22 +230,16 @@ function Hero({ section }: { section: HomeSection }) {
           const image =
             imageUrl(slide.mobile_image) || imageUrl(slide.desktop_image);
           return (
-            <View key={index} style={[styles.hero, { width: cardWidth }]}>
-              {image && (
-                <StoreImage
-                  uri={image}
-                  label={string(slide.heading) || 'Featured collection'}
-                  style={styles.heroImage}
-                />
-              )}
-              <View style={styles.heroCopy}>
+            <View key={index} style={[styles.hero, { width: cardWidth, height: 180 * scale, borderRadius: 15 * scale }]}>
+              <View pointerEvents="none" style={[styles.heroAccent, { width: 150 * scale, height: 150 * scale, borderRadius: 75 * scale, left: 150 * scale, bottom: -100 * scale }]} />
+              <View style={[styles.heroCopy, { paddingLeft: 40 * scale, paddingRight: 8 * scale, paddingVertical: 20 * scale, gap: 8 * scale }]}>
                 {!!slide.heading && (
-                  <AppText style={styles.heroTitle}>
+                  <AppText style={[styles.heroTitle, { fontSize: 22 * scale, lineHeight: 29 * scale }]}>
                     {string(slide.heading)}
                   </AppText>
                 )}
                 {!!slide.description && (
-                  <AppText style={styles.heroDescription}>
+                  <AppText style={[styles.heroDescription, { fontSize: 16 * scale, lineHeight: 22 * scale }]}>
                     {string(slide.description)}
                   </AppText>
                 )}
@@ -232,32 +248,37 @@ function Hero({ section }: { section: HomeSection }) {
                     cta =>
                       string(cta.label) && resolveStoreLink(string(cta.link)),
                   )
+                  .slice(0, 1)
                   .map((cta, i) => (
-                    <Button
-                      key={i}
-                      label={string(cta.label)}
-                      onPress={() => openStoreLink(string(cta.link))}
-                    />
+                    <Pressable key={i} accessibilityRole="button" onPress={() => openStoreLink(string(cta.link))} style={[styles.heroCta, { minHeight: 36 * scale, paddingHorizontal: 16 * scale, borderRadius: 18 * scale }]}>
+                      <AppText style={[styles.heroCtaText, { fontSize: 14 * scale }]}>{string(cta.label)}</AppText>
+                    </Pressable>
                   ))}
               </View>
+              {(image || /amplifier boards/i.test(string(slide.heading))) && (
+                <View style={[styles.heroImageWrap, { width: 86 * scale, height: 102 * scale, marginRight: 38 * scale, borderWidth: 3 * scale }]}>
+                  {/amplifier boards/i.test(string(slide.heading))
+                    ? <Image source={require('../../assets/images/HeroAmplifier.png')} accessibilityLabel="Amplifier circuit board" resizeMode="cover" style={styles.heroImage} />
+                    : <StoreImage uri={image} label={string(slide.heading) || 'Featured collection'} style={styles.heroImage} />}
+                </View>
+              )}
             </View>
           );
         })}
       </ScrollView>
       {slides.length > 1 && (
-        <View
-          accessible
-          accessibilityLabel={`Banner ${Math.min(
-            active + 1,
-            slides.length,
-          )} of ${slides.length}`}
-          style={styles.dots}
-        >
+        <View style={styles.dots}>
           {slides.map((_, i) => (
-            <View
+            <Pressable
               key={i}
-              style={[styles.dot, i === active && styles.dotActive]}
-            />
+              accessibilityRole="button"
+              accessibilityLabel={`Show banner ${i + 1} of ${slides.length}`}
+              accessibilityState={{ selected: i === active }}
+              onPress={() => goToSlide(i)}
+              style={styles.dotTouch}
+            >
+              <View style={[styles.dot, i === active && styles.dotActive]} />
+            </Pressable>
           ))}
         </View>
       )}
@@ -329,12 +350,15 @@ export default function HomeSectionView({ section }: { section: HomeSection }) {
 }
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  section: { padding: 16, gap: 14 },
+  section: { paddingHorizontal: 16, paddingVertical: 20, gap: 14 },
   sale: { backgroundColor: '#FFF5E7' },
   viewAll: { minHeight: 44, justifyContent: 'center' },
   rail: { gap: 12 },
   product: { width: 190 },
-  category: { width: 112 },
+  category: { width: 96 },
+  categoryButton: { alignItems: 'flex-start', gap: 8 },
+  categoryImage: { width: 76, height: 76, borderRadius: 38, borderWidth: 1, borderColor: '#BBDCD6', backgroundColor: '#FFFFFF' },
+  categoryName: { width: 96, color: theme.colors.primary, textAlign: 'left', fontFamily: theme.fonts.medium, fontSize: 13, lineHeight: 20 },
   counter: {
     color: '#FFFFFF',
     backgroundColor: theme.colors.primary,
@@ -342,30 +366,36 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     fontFamily: theme.fonts.bold,
   },
-  heroSection: { gap: 10, paddingVertical: 8 },
+  heroSection: { paddingBottom: 0 },
   heroRail: { paddingHorizontal: 16, gap: 12 },
   hero: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 18,
+    flexDirection: 'row',
+    backgroundColor: '#079C86',
+    borderRadius: 16,
     overflow: 'hidden',
   },
-  heroImage: { width: '100%', aspectRatio: 2.05, backgroundColor: '#E0F2F1' },
-  heroCopy: { padding: 18, gap: 10 },
+  heroAccent: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: '#22AF8D', left: 98, bottom: -108 },
+  heroImageWrap: { width: '32%', height: 112, alignSelf: 'center', marginRight: 20, borderWidth: 3, borderColor: '#FFFFFF', backgroundColor: '#E8F8F5', overflow: 'hidden' },
+  heroImage: { width: '100%', height: '100%' },
+  heroCopy: { flex: 1, paddingHorizontal: 18, paddingVertical: 20, justifyContent: 'center', alignItems: 'flex-start', gap: 8 },
   heroTitle: {
-    fontSize: 22,
-    lineHeight: 29,
+    fontSize: 20,
+    lineHeight: 26,
     fontFamily: theme.fonts.bold,
     color: '#FFFFFF',
   },
-  heroDescription: { color: '#FFFFFF', fontSize: 15, lineHeight: 22 },
-  dots: { flexDirection: 'row', gap: 5, justifyContent: 'center' },
+  heroDescription: { color: '#FFFFFF', fontSize: 13, lineHeight: 19 },
+  heroCta: { minHeight: 40, marginTop: 4, borderRadius: 22, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primaryDark },
+  heroCtaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 13 },
+  dots: { position: 'absolute', left: 16, right: 16, bottom: 2, flexDirection: 'row', gap: 2, justifyContent: 'center' },
+  dotTouch: { width: 32, height: 30, alignItems: 'center', justifyContent: 'center' },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.colors.border,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  dotActive: { width: 18, backgroundColor: theme.colors.primary },
+  dotActive: { width: 18, backgroundColor: '#FFFFFF' },
   trust: {
     margin: 16,
     padding: 16,

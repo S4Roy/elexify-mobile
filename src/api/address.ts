@@ -41,6 +41,9 @@ function parseAddress(value: unknown): Address | null {
   }
   const fullName = string(a.full_name);
   const [firstName, ...rest] = fullName.trim().split(/\s+/);
+  const city = parseMaster(a.city);
+  const state = parseMaster(a.state);
+  const country = parseMaster(a.country);
   return {
     id,
     fullName,
@@ -52,9 +55,9 @@ function parseAddress(value: unknown): Address | null {
     addressLine1: string(a.address_line_1),
     addressLine2: string(a.address_line_2),
     landMark: string(a.land_mark),
-    city: parseMaster(a.city),
-    state: parseMaster(a.state),
-    country: parseMaster(a.country),
+    city: { ...city, name: city.name || string(a.city_name) },
+    state: { ...state, name: state.name || string(a.state_name) },
+    country: { ...country, name: country.name || string(a.country_name) },
     postcode: string(a.postcode),
     addressType: string(a.address_type) || 'home',
     isDefault: a.is_default === true,
@@ -107,6 +110,8 @@ export type AddressInput = {
   postcode: string;
   addressType?: string;
   isDefault?: boolean;
+  latitude?: number;
+  longitude?: number;
 };
 
 function addressPayload(input: AddressInput) {
@@ -115,16 +120,19 @@ function addressPayload(input: AddressInput) {
     last_name: input.lastName,
     phone_code: '91',
     phone: input.phone,
-    ...(input.email ? { email: input.email } : {}),
+    email: input.email ?? '',
     address_line_1: input.addressLine1,
-    ...(input.addressLine2 ? { address_line_2: input.addressLine2 } : {}),
-    ...(input.landMark ? { land_mark: input.landMark } : {}),
+    address_line_2: input.addressLine2 ?? '',
+    land_mark: input.landMark ?? '',
     city: input.city,
     state: input.state,
     country: input.country ?? 101,
     postcode: input.postcode,
     address_type: input.addressType || 'home',
     is_default: input.isDefault ?? false,
+    ...(input.latitude != null && input.longitude != null
+      ? { latitude: input.latitude, longitude: input.longitude }
+      : {}),
   };
 }
 
@@ -150,7 +158,49 @@ export type PincodeResult = {
   city: MasterRef | null;
   state: MasterRef | null;
   country: MasterRef | null;
+  suggestedCityName?: string;
 };
+
+export type ReverseGeocodeResult = PincodeResult & {
+  pincode: string;
+  suggestedAddressLine1: string;
+  suggestedAddressLine2: string;
+};
+
+export async function reverseGeocode(latitude: number, longitude: number): Promise<ReverseGeocodeResult> {
+  const res = await api.get('site/common/reverse-geocode', { params: { lat: latitude, lng: longitude } });
+  const d = record(res.data?.data);
+  const master = (value: unknown): MasterRef | null => {
+    const item = parseMaster(value);
+    return item.id !== null ? item : null;
+  };
+  return {
+    found: d.found === true,
+    serviceable: d.serviceable === true,
+    pincode: string(d.pincode),
+    city: master(d.city),
+    state: master(d.state),
+    country: master(d.country),
+    suggestedCityName: string(d.suggested_city_name),
+    suggestedAddressLine1: string(d.suggested_address_line_1),
+    suggestedAddressLine2: string(d.suggested_address_line_2),
+  };
+}
+
+async function fetchMasterList(path: string, signal?: AbortSignal): Promise<MasterRef[]> {
+  const res = await api.get(path, { signal });
+  const data = res.data?.data;
+  return Array.isArray(data)
+    ? data.map(parseMaster).filter((item): item is MasterRef & { id: number } => item.id !== null)
+    : [];
+}
+
+export const fetchStates = (countryId: number, signal?: AbortSignal) =>
+  fetchMasterList(`site/common/states/${countryId}`, signal);
+
+export const fetchCities = (stateId: number, signal?: AbortSignal) =>
+  fetchMasterList(`site/common/cities/${stateId}`, signal);
+
 export async function lookupPincode(
   postcode: string,
   signal?: AbortSignal,
@@ -169,5 +219,6 @@ export async function lookupPincode(
     city: master(d.city),
     state: master(d.state),
     country: master(d.country),
+    suggestedCityName: string(d.suggested_city_name),
   };
 }

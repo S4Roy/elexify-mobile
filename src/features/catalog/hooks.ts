@@ -5,7 +5,7 @@ import { useSession } from '../../stores/session';
 export function useIdentity() {
   return useSession(s => s.status + ':' + (s.guestId ?? ''));
 }
-export function useProducts(params: Params) {
+export function useProducts(params: Params, enabled = true) {
   const identity = useIdentity();
   return useInfiniteQuery({
     queryKey: ['products', identity, params],
@@ -13,7 +13,7 @@ export function useProducts(params: Params) {
     queryFn: ({ pageParam, signal }) =>
       fetchProducts(params, pageParam, signal),
     getNextPageParam: page => page.nextPage,
-    enabled: !!apiConfig.baseUrl,
+    enabled: enabled && !!apiConfig.baseUrl,
   });
 }
 export function useCategories(params: Params, enabled = true) {

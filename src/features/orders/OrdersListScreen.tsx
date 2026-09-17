@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { AppText, Feedback } from '../../components/ui';
 import { ShopHeader, money, shop } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
@@ -34,12 +34,28 @@ function Row({ order }: { order: OrderSummary }) {
 }
 
 export default function OrdersListScreen() {
+  const params = useLocalSearchParams<{ view?: string }>();
+  const view = Array.isArray(params.view) ? params.view[0] : params.view;
   const orders = useOrders();
-  const items = orders.data?.pages.flatMap(page => page.items) ?? [];
+  const allItems = orders.data?.pages.flatMap(page => page.items) ?? [];
+  const items = allItems.filter(order => {
+    const status = order.orderStatus.toLowerCase();
+    if (view === 'ongoing') return !['delivered', 'returned', 'cancelled', 'failed'].includes(status);
+    if (view === 'completed') return status === 'delivered';
+    if (view === 'returns') return status.includes('return');
+    if (view === 'cancelled') return status.includes('cancel');
+    return true;
+  });
+  useEffect(() => {
+    if (view && items.length === 0 && orders.hasNextPage && !orders.isFetchingNextPage && !orders.isFetchNextPageError) {
+      orders.fetchNextPage().catch(() => undefined);
+    }
+  }, [view, items.length, orders]);
+  const title = view === 'ongoing' ? 'Ongoing Orders' : view === 'completed' ? 'Completed Orders' : view === 'returns' ? 'Returns' : view === 'cancelled' ? 'Cancelled Orders' : 'Your orders';
 
   return (
     <View style={shop.page}>
-      <ShopHeader title="Your orders" back />
+      <ShopHeader title={title} back />
       <FlatList
         data={items}
         keyExtractor={item => item.id}
@@ -60,8 +76,8 @@ export default function OrdersListScreen() {
           />
         }
         ListEmptyComponent={
-          !orders.isPending && !orders.isError ? (
-            <Feedback title="No orders yet" message="Orders you place will show up here." />
+          !orders.isPending && !orders.isError && !orders.hasNextPage ? (
+            <Feedback title={view ? `No ${title.toLowerCase()}` : 'No orders yet'} message={view ? 'Orders in this category will appear here.' : 'Orders you place will show up here.'} />
           ) : null
         }
         renderItem={({ item }) => <Row order={item} />}
