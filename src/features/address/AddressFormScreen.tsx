@@ -297,6 +297,11 @@ export default function AddressFormScreen() {
       setFocus('postcode');
       return;
     }
+    if (resolved.cityName.trim().replace(/\s+/g, ' ').length > 40) {
+      setLocationError('City must be 40 characters or fewer. Contact support to correct this city listing.');
+      setError('postcode', { type: 'validate', message: 'City must be 40 characters or fewer. Contact support to correct this city listing.' });
+      return;
+    }
     save.mutate({
       id,
       firstName: values.firstName.trim(),
