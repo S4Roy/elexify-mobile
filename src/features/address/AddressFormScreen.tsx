@@ -68,7 +68,7 @@ function Field({
   return (
     <View style={styles.field}>
       <AppText style={styles.label}>{label}{required && <AppText style={styles.required}> *</AppText>}</AppText>
-      <View style={[styles.inputShell, multiline && styles.multilineShell, fieldState.error && styles.invalid]}>
+      <View style={[styles.inputShell, inputProps.editable === false && styles.inputDisabled, multiline && styles.multilineShell, fieldState.error && styles.invalid]}>
         {!!prefix && <AppText style={styles.prefix}>{prefix}</AppText>}
         <TextInput
           {...inputProps}
@@ -138,8 +138,8 @@ export default function AddressFormScreen() {
     reset({
       firstName: existing.firstName,
       lastName: existing.lastName,
-      phone: existing.phone,
-      email: existing.email ?? '',
+      phone: (account.data?.mobile ?? '').replace(/\D/g, "").slice(-10),
+      email: account.data?.email ?? '',
       postcode: existing.postcode,
       addressLine1: existing.addressLine1,
       addressLine2: existing.addressLine2,
@@ -148,17 +148,19 @@ export default function AddressFormScreen() {
         ? existing.addressType as FormValues['addressType'] : 'home',
       isDefault: existing.isDefault,
     });
-  }, [existing, id, reset]);
+  }, [existing, id, reset, account.data?.mobile, account.data?.email]);
 
   useEffect(() => {
     if (id || !account.data) return;
     const current = getValues();
     if (!dirtyFields.firstName && !current.firstName && account.data.firstName) setValue('firstName', account.data.firstName);
     if (!dirtyFields.lastName && !current.lastName && account.data.lastName) setValue('lastName', account.data.lastName);
-    if (!dirtyFields.email && !current.email && account.data.email) setValue('email', account.data.email);
-    const phone = account.data.mobile?.replace(/\D/g, '').slice(-10);
-    if (!dirtyFields.phone && !current.phone && phone && mobilePattern.test(phone)) setValue('phone', phone);
   }, [account.data, dirtyFields, getValues, id, setValue]);
+
+  useEffect(() => {
+    setValue('phone', (account.data?.mobile ?? '').replace(/\D/g, '').slice(-10));
+    setValue('email', account.data?.email ?? '');
+  }, [account.data?.mobile, account.data?.email, existing, setValue]);
 
   useEffect(() => {
     if (!id && addresses.data?.items.length === 0 && !dirtyFields.isDefault) {
@@ -355,13 +357,15 @@ export default function AddressFormScreen() {
                 autoCapitalize="words" rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
             </View>
           </View>
-          <Field control={control} name="phone" label="Mobile number" placeholder="10-digit mobile number" required prefix="+91"
+          <Field control={control} name="phone" editable={false} accessibilityState={{ disabled: true }} label="Mobile number" placeholder="10-digit mobile number" required prefix="+91"
             keyboardType="number-pad" textContentType="telephoneNumber" maxLength={10} transform={value => value.replace(/\D/g, '')}
-            rules={{ validate: value => mobilePattern.test(value) || 'Enter a valid 10-digit Indian mobile number.' }} />
-          <Field control={control} name="email" label="Email (optional)" placeholder="name@example.com" keyboardType="email-address"
+            rules={{ validate: value => mobilePattern.test(value) || 'Add a valid mobile number in your account settings.' }} />
+          <AppText style={styles.helper}>Automatically filled from your account. Update your mobile number in your account settings.</AppText>
+          <Field control={control} name="email" editable={false} accessibilityState={{ disabled: true }} label="Email (optional)" placeholder="No account email" keyboardType="email-address"
             autoCapitalize="none" autoCorrect={false} textContentType="emailAddress" maxLength={254}
-            rules={{ validate: value => !value.trim() || emailPattern.test(value.trim()) || 'Enter a valid email address.' }} />
+            rules={{ validate: value => !value.trim() || emailPattern.test(value.trim()) || 'Update your email in your account settings.' }} />
 
+          <AppText style={styles.helper}>Automatically filled from your account. Update your email in your account settings.</AppText>
           <View style={styles.sectionBreak} />
           <AppText style={styles.sectionTitle}>Delivery address</AppText>
           <AppText style={styles.label}>Address type <AppText style={styles.required}>*</AppText></AppText>
@@ -521,6 +525,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: theme.fonts.medium, fontSize: 14, color: theme.colors.text },
   required: { color: theme.colors.danger },
   inputShell: { minHeight: 52, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  inputDisabled: { backgroundColor: '#F3F4F6', opacity: 0.7 },
   invalid: { borderColor: theme.colors.danger, borderWidth: 1.5 },
   multilineShell: { minHeight: 80, alignItems: 'flex-start' },
   inputText: { flex: 1, minHeight: 50, paddingVertical: 10, fontFamily: theme.fonts.regular, fontSize: 15, color: theme.colors.text },
