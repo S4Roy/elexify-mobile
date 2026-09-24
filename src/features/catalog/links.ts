@@ -1,12 +1,15 @@
 import { Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
 import type { Product } from '../../api/discovery';
+// Canonical product route is singular ("/product/<slug>/"); the legacy
+// plural "/products/<slug>" still works but now costs an extra 301 hop.
 export function websiteProductUrl(
   product: Pick<Product, 'slug' | 'variationId'>,
 ) {
   return (
-    'https://elexify.online/products/' +
+    'https://elexify.online/product/' +
     encodeURIComponent(product.slug) +
+    '/' +
     (product.variationId
       ? '?variation_id=' + encodeURIComponent(product.variationId)
       : '')
@@ -17,9 +20,7 @@ export function openWebsite(url: string) {
     Alert.alert('Unable to open the page', 'Please try again later.'),
   );
 }
-export function resolveStoreLink(
-  value: string,
-): {
+export function resolveStoreLink(value: string): {
   kind: 'products' | 'product' | 'category' | 'home' | 'website';
   url: string;
   category?: string;

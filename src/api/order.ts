@@ -58,7 +58,9 @@ export async function placeOrder(params: {
     ...(params.couponCode ? { coupon_code: params.couponCode } : {}),
     isDirectCheckout: params.isDirectCheckout ?? false,
     idempotency_key: params.idempotencyKey,
-    ...(params.expectedTotal !== undefined ? { expected_total: params.expectedTotal } : {}),
+    ...(params.expectedTotal !== undefined
+      ? { expected_total: params.expectedTotal }
+      : {}),
   });
   const data = record(res.data?.data);
   const order = parsePlacedOrder(data.order);
@@ -98,6 +100,7 @@ export type OrderSummary = {
   orderStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  isPartialCod: boolean;
   grandTotal: number;
   totalItems: number;
   currency: string;
@@ -116,10 +119,40 @@ function parseOrderSummary(value: unknown): OrderSummary | null {
     orderStatus: string(o.order_status),
     paymentStatus: string(o.payment_status),
     paymentMethod: string(o.payment_method),
+    isPartialCod: o.is_partial_cod === true,
     grandTotal: number(o.grand_total) ?? 0,
     totalItems: number(o.total_items) ?? 0,
     currency: string(o.currency) || 'INR',
     createdAt: string(o.created_at),
+  };
+}
+
+// A pending razorpay (or partial-COD advance) order can be retried within a
+// one-hour window from placement — mirrors elexify.online's
+// account/orders/[id]/page.tsx handleRetryPayment/canRetryPayment.
+export type PaymentRetry = {
+  id: string;
+  amount: number;
+  currency: string;
+  checkoutKeyId: string;
+  orderNumber: string;
+  expiresAt: string | null;
+};
+
+export async function retryOrderPayment(
+  orderId: string,
+): Promise<PaymentRetry> {
+  const res = await api.post('site/inventory/order/retry-payment', {
+    order_id: orderId,
+  });
+  const d = record(res.data?.data);
+  return {
+    id: string(d.id),
+    amount: number(d.amount) ?? 0,
+    currency: string(d.currency) || 'INR',
+    checkoutKeyId: string(d.checkout_key_id),
+    orderNumber: string(d.order_id),
+    expiresAt: string(d.expires_at) || null,
   };
 }
 
@@ -140,7 +173,8 @@ export async function fetchOrders(page = 1, signal?: AbortSignal) {
   const totalPages = number(d.totalPages);
   const more =
     d.hasNextPage === true ||
-    (d.hasNextPage !== false && (totalPages !== null ? page < totalPages : false));
+    (d.hasNextPage !== false &&
+      (totalPages !== null ? page < totalPages : false));
   return { items, nextPage: more && items.length > 0 ? page + 1 : undefined };
 }
 
@@ -150,9 +184,15 @@ export type OrderItem = {
   image?: string;
   quantity: number;
   price: number | null;
+  regularPrice: number | null;
+  totalPrice: number | null;
+  discountPercent: number | null;
 };
 
-export type PackageTrackingEvent = { status: string; occurredAt: string | null };
+export type PackageTrackingEvent = {
+  status: string;
+  occurredAt: string | null;
+};
 
 export type OrderPackage = {
   packageNumber: number;
@@ -194,6 +234,8 @@ export type OrderDetail = OrderSummary & {
   shipping: number | null;
   discount: number | null;
   codFee: number | null;
+  advanceAmount: number | null;
+  codDueAmount: number | null;
   note: string;
   cancellation: { allowed: boolean; reason: string | null };
   returns: ReturnPolicy;
@@ -204,7 +246,10 @@ export type OrderDetail = OrderSummary & {
 
 function parseTrackingEvent(value: unknown): PackageTrackingEvent {
   const e = record(value);
-  return { status: string(e.status), occurredAt: string(e.occurred_at) || null };
+  return {
+    status: string(e.status),
+    occurredAt: string(e.occurred_at) || null,
+  };
 }
 
 export function parsePackage(value: unknown): OrderPackage | null {
@@ -213,7 +258,9 @@ export function parsePackage(value: unknown): OrderPackage | null {
   if (packageNumber === null || !string(p.status)) {
     return null;
   }
-  const events = Array.isArray(p.tracking_events) ? p.tracking_events.map(parseTrackingEvent) : [];
+  const events = Array.isArray(p.tracking_events)
+    ? p.tracking_events.map(parseTrackingEvent)
+    : [];
   return {
     packageNumber,
     referenceId: string(p.reference_id) || null,
@@ -267,7 +314,11 @@ export async function fetchOrderDetail(
   if (!summary) {
     return null;
   }
-  const rawItems = Array.isArray(o.order_items) ? o.order_items : Array.isArray(o.items) ? o.items : [];
+  const rawItems = Array.isArray(o.order_items)
+    ? o.order_items
+    : Array.isArray(o.items)
+    ? o.items
+    : [];
   const items: OrderItem[] = rawItems.map(item => {
     const i = record(item);
     const product = record(i.product);
@@ -275,10 +326,16 @@ export async function fetchOrderDetail(
     const firstImage = record(images[0]);
     return {
       id: string(i._id),
-      name: string(product.name) || string(i.name),
+      name: string(product.name) || string(i.display_name) || string(i.name),
       image: typeof firstImage.url === 'string' ? firstImage.url : undefined,
       quantity: number(i.quantity) ?? 0,
-      price: number(i.price),
+      // The order-item resource exposes unit_price (not price) — this was
+      // previously reading a field that doesn't exist, so every item's
+      // price (and any breakdown derived from it) silently showed blank.
+      price: number(i.unit_price),
+      regularPrice: number(i.regular_price),
+      totalPrice: number(i.total_price),
+      discountPercent: number(i.discount_percent),
     };
   });
   const capabilities = record(o.capabilities);
@@ -298,7 +355,8 @@ export async function fetchOrderDetail(
           courierName: string(o.courier_name) || null,
           etd: string(o.etd) || null,
           shiprocketStatus: string(o.shiprocket_status) || null,
-          shiprocketStatusUpdatedAt: string(o.shiprocket_status_updated_at) || null,
+          shiprocketStatusUpdatedAt:
+            string(o.shiprocket_status_updated_at) || null,
         }
       : null;
   const invoice = record(o.invoice);
@@ -308,6 +366,8 @@ export async function fetchOrderDetail(
     shipping: number(o.shipping),
     discount: number(o.discount),
     codFee: number(o.cod_fee),
+    advanceAmount: number(o.advance_amount),
+    codDueAmount: number(o.cod_due_amount),
     note: string(o.note),
     cancellation: {
       allowed: cancellation.allowed === true,

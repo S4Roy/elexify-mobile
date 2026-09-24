@@ -10,6 +10,7 @@ import {
 import { useShopping } from '../stores/shopping';
 import { useSession } from '../stores/session';
 import { AppText, Feedback, Loading, Screen } from '../components/ui';
+import { ConfirmProvider } from '../components/ui/ConfirmDialog';
 import { ApiError } from '../api/client';
 import { theme } from '../theme';
 
@@ -64,31 +65,33 @@ export function AppProviders({ children }: React.PropsWithChildren) {
   }, [client, initialize]);
   return (
     <QueryClientProvider client={client}>
-      <View style={providerStyles.container}>
-        {(network.isConnected === false ||
-          network.isInternetReachable === false) && (
-          <AppText accessibilityRole="alert" style={providerStyles.offline}>
-            You’re offline. Reconnect to refresh the store.
-          </AppText>
-        )}
-        {status === 'loading' ? (
-          <Screen title="Elexify">
-            <Loading />
-          </Screen>
-        ) : status === 'error' ? (
-          <Screen title="Elexify">
-            <Feedback
-              title="Unable to restore your session"
-              message="Please try again to continue."
-              onRetry={() => {
-                initialize().catch(() => undefined);
-              }}
-            />
-          </Screen>
-        ) : (
-          children
-        )}
-      </View>
+      <ConfirmProvider>
+        <View style={providerStyles.container}>
+          {(network.isConnected === false ||
+            network.isInternetReachable === false) && (
+            <AppText accessibilityRole="alert" style={providerStyles.offline}>
+              You’re offline. Reconnect to refresh the store.
+            </AppText>
+          )}
+          {status === 'loading' ? (
+            <Screen title="Elexify">
+              <Loading />
+            </Screen>
+          ) : status === 'error' ? (
+            <Screen title="Elexify">
+              <Feedback
+                title="Unable to restore your session"
+                message="Please try again to continue."
+                onRetry={() => {
+                  initialize().catch(() => undefined);
+                }}
+              />
+            </Screen>
+          ) : (
+            children
+          )}
+        </View>
+      </ConfirmProvider>
     </QueryClientProvider>
   );
 }

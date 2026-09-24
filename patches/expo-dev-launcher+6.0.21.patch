@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
+index f638841..1903a8c 100644
+--- a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
++++ b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherController.kt
+@@ -436,8 +436,12 @@ class DevLauncherController private constructor() :
+       }
+ 
+       val testInterceptor = DevLauncherKoinContext.app.koin.get<DevLauncherTestInterceptor>()
+-      if (!testInterceptor.allowReinitialization()) {
+-        check(!wasInitialized()) { "DevelopmentClientController was initialized." }
++      // Some OEM launchers (observed on MIUI) pre-warm the process and run
++      // Application#onCreate twice before the real launch intent arrives, which
++      // would otherwise hard-crash this second call. Re-initializing with the
++      // same context/reactHost is a no-op, so skip instead of crashing.
++      if (!testInterceptor.allowReinitialization() && wasInitialized()) {
++        return
+       }
+       DevLauncherKoinContext.app.koin.loadModules(
+         listOf(

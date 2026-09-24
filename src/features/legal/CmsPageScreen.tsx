@@ -1,5 +1,10 @@
 import React from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import RenderHtml from '@native-html/render';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -20,6 +25,13 @@ const TITLES: Record<string, string> = {
   'refund-cancellations-policy': 'Refund & Cancellation Policy',
 };
 
+const EYEBROWS: Record<string, string> = {
+  'about-us': 'About Elexify',
+  'privacy-policy': 'Legal',
+  'terms-conditions': 'Legal',
+  'refund-cancellations-policy': 'Policies',
+};
+
 const htmlStyles = {
   p: { marginBottom: 10 },
   h1: { fontFamily: theme.fonts.bold },
@@ -28,7 +40,12 @@ const htmlStyles = {
   li: { marginBottom: 4 },
   a: { color: theme.colors.primary },
 };
-const htmlBaseStyle = { fontFamily: theme.fonts.regular, fontSize: 14, lineHeight: 21, color: theme.colors.text };
+const htmlBaseStyle = {
+  fontFamily: theme.fonts.regular,
+  fontSize: 14,
+  lineHeight: 21,
+  color: theme.colors.text,
+};
 
 export default function CmsPageScreen() {
   const { width } = useWindowDimensions();
@@ -50,16 +67,35 @@ export default function CmsPageScreen() {
             query.refetch().catch(() => undefined);
           }}
         />
+        {query.data && (
+          <View style={styles.hero}>
+            <AppText style={styles.eyebrow}>
+              {EYEBROWS[slug] ?? 'Information'}
+            </AppText>
+            <AppText style={styles.title}>
+              {TITLES[slug] ?? query.data.title}
+            </AppText>
+            {!!query.data.shortDescription && (
+              <AppText style={styles.lead}>
+                {query.data.shortDescription}
+              </AppText>
+            )}
+          </View>
+        )}
         {query.data && !query.data.content && (
-          <AppText style={shop.muted}>This page has no content yet.</AppText>
+          <View style={styles.card}>
+            <AppText style={shop.muted}>This page has no content yet.</AppText>
+          </View>
         )}
         {query.data?.content && (
-          <RenderHtml
-            contentWidth={width - 32}
-            source={{ html: query.data.content }}
-            tagsStyles={htmlStyles}
-            baseStyle={htmlBaseStyle}
-          />
+          <View style={styles.card}>
+            <RenderHtml
+              contentWidth={width - 64}
+              source={{ html: query.data.content }}
+              tagsStyles={htmlStyles}
+              baseStyle={htmlBaseStyle}
+            />
+          </View>
         )}
       </ScrollView>
     </View>
@@ -67,5 +103,36 @@ export default function CmsPageScreen() {
 }
 
 const styles = StyleSheet.create({
-  body: { padding: 16, paddingBottom: 32 },
+  body: { padding: 16, paddingBottom: 32, gap: 16 },
+  hero: {
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: 16,
+    padding: 18,
+    gap: 6,
+  },
+  eyebrow: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  title: {
+    fontFamily: theme.fonts.bold,
+    fontSize: 22,
+    color: theme.colors.text,
+  },
+  lead: {
+    color: theme.colors.secondary,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    padding: 18,
+  },
 });

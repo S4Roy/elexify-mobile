@@ -13,12 +13,14 @@ export function addRecent(current: string[], input: string): string[] {
 export const useSearchHistory = create<{
   terms: string[];
   add: (term: string) => void;
+  remove: (term: string) => void;
   clear: () => void;
 }>()(
   persist(
     set => ({
       terms: [],
       add: term => set(s => ({ terms: addRecent(s.terms, term) })),
+      remove: term => set(s => ({ terms: s.terms.filter(t => t !== term) })),
       clear: () => set({ terms: [] }),
     }),
     {

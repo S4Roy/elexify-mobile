@@ -1,5 +1,11 @@
 import { api, ApiError } from './client';
-import { imageUrl, record, string } from './discovery';
+import {
+  imageUrl,
+  parseProduct,
+  record,
+  string,
+  type Product,
+} from './discovery';
 
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -80,9 +86,7 @@ function parseVariation(value: unknown): Variation {
     price: num(d.sale_price),
     regularPrice: num(d.regular_price),
     stockQuantity: num(d.stock_quantity),
-    images: images
-      .map(imageUrl)
-      .filter((u): u is string => !!u),
+    images: images.map(imageUrl).filter((u): u is string => !!u),
     askForPrice: d.ask_for_price === true,
     selections: attrs
       .map(record)
@@ -102,7 +106,9 @@ export function parseProductDetail(value: unknown): ProductDetail {
   const categories = Array.isArray(p.categories) ? p.categories : [];
   const attributes = Array.isArray(p.attributes) ? p.attributes : [];
   const variations = Array.isArray(p.variations) ? p.variations : [];
-  const quantityDiscounts = Array.isArray(p.quantity_discounts) ? p.quantity_discounts : [];
+  const quantityDiscounts = Array.isArray(p.quantity_discounts)
+    ? p.quantity_discounts
+    : [];
   return {
     id: string(p._id),
     slug: string(p.slug),
@@ -113,7 +119,11 @@ export function parseProductDetail(value: unknown): ProductDetail {
     images: images.map(imageUrl).filter((u): u is string => !!u),
     categories: categories
       .map(record)
-      .map(c => ({ id: string(c._id), name: string(c.name), slug: string(c.slug) }))
+      .map(c => ({
+        id: string(c._id),
+        name: string(c.name),
+        slug: string(c.slug),
+      }))
       .filter(c => c.id && c.name),
     price: num(p.sale_price),
     regularPrice: num(p.regular_price),
@@ -130,7 +140,9 @@ export function parseProductDetail(value: unknown): ProductDetail {
       }))
       .filter(t => t.minQuantity > 0 && t.discountPercent > 0)
       .sort((a, b) => a.minQuantity - b.minQuantity),
-    attributes: attributes.map(parseAttribute).filter(a => a.id && a.values.length > 0),
+    attributes: attributes
+      .map(parseAttribute)
+      .filter(a => a.id && a.values.length > 0),
     variations: variations.map(parseVariation).filter(v => v.id),
   };
 }
@@ -139,14 +151,25 @@ export async function fetchProductDetail(
   variationId?: string,
   signal?: AbortSignal,
 ) {
-  const res = await api.get(`site/inventory/product/details/${encodeURIComponent(slug)}`, {
-    params: { currency: 'INR', ...(variationId ? { variation_id: variationId } : {}) },
-    signal,
-  });
+  const res = await api.get(
+    `site/inventory/product/details/${encodeURIComponent(slug)}`,
+    {
+      params: {
+        currency: 'INR',
+        ...(variationId ? { variation_id: variationId } : {}),
+      },
+      signal,
+    },
+  );
   return parseProductDetail(res.data?.data);
 }
 
-export type Specification = { id: string; label: string; value: string; type: string };
+export type Specification = {
+  id: string;
+  label: string;
+  value: string;
+  type: string;
+};
 function parseSpecification(value: unknown): Specification | null {
   const d = record(value);
   const spec = record(d.specification);
@@ -158,10 +181,16 @@ function parseSpecification(value: unknown): Specification | null {
   const type = string(spec.type);
   let text: string;
   if (type === 'boolean') {
-    text = d.value === true || string(d.value_string).toLowerCase() === 'true' ? 'Yes' : 'No';
+    text =
+      d.value === true || string(d.value_string).toLowerCase() === 'true'
+        ? 'Yes'
+        : 'No';
   } else {
     const numberValue = num(d.value_number);
-    text = string(d.value) || string(d.value_string) || (numberValue !== null ? String(numberValue) : '');
+    text =
+      string(d.value) ||
+      string(d.value_string) ||
+      (numberValue !== null ? String(numberValue) : '');
   }
   return { id, label, value: text, type };
 }
@@ -226,7 +255,10 @@ export async function fetchReviews(
   signal?: AbortSignal,
 ) {
   const res = await api.get('site/cms/ratings', {
-    params: { product_id: productId, ...(variationId ? { variation_id: variationId } : {}) },
+    params: {
+      product_id: productId,
+      ...(variationId ? { variation_id: variationId } : {}),
+    },
     signal,
   });
   const docs = res.data?.data?.docs;
@@ -259,4 +291,19 @@ export async function checkDelivery(params: {
     deliveryDisplay: string(delivery.display),
     isAvailable: data.is_available !== false,
   };
+}
+
+// "You may also like" — co-purchase recommendations for a product, padded
+// with bestsellers by the backend when there isn't enough purchase history.
+export async function fetchAlsoLike(
+  slug: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<Product[]> {
+  const res = await api.get(
+    `site/inventory/product/also-like/${encodeURIComponent(slug)}`,
+    { params: { limit, currency: 'INR' }, signal },
+  );
+  const docs = record(res.data?.data).docs;
+  return Array.isArray(docs) ? docs.map(parseProduct) : [];
 }

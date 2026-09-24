@@ -23,7 +23,18 @@ export type CodEligibility = {
   eligible: boolean;
   fee: number;
   reason: string | null;
+  code: string | null;
+  minOrder: number | null;
+  maxOrder: number | null;
+  advanceEnabled: boolean;
+  advancePercent: number;
 };
+
+export type EstimatedDelivery = {
+  display: string;
+  minDays: number;
+  maxDays: number;
+} | null;
 
 export type CartSummary = {
   items: CartItem[];
@@ -34,6 +45,7 @@ export type CartSummary = {
   totalDiscount: number;
   currency: string;
   shippingAmount: number | null;
+  estimatedDelivery: EstimatedDelivery;
   cod: CodEligibility | null;
 };
 
@@ -80,6 +92,7 @@ export function parseCartSummary(value: unknown): CartSummary {
   }
   const shipping = record(d.shipping);
   const cod = record(d.cod);
+  const estimatedDelivery = record(d.estimated_delivery);
   return {
     items,
     // net_product_amount and subtotal are always equal; fall back defensively either way.
@@ -90,8 +103,24 @@ export function parseCartSummary(value: unknown): CartSummary {
     totalDiscount: number(d.total_discount) ?? 0,
     currency: string(d.currency) || 'INR',
     shippingAmount: d.shipping ? number(shipping.amount) : null,
+    estimatedDelivery: d.estimated_delivery
+      ? {
+          display: string(estimatedDelivery.display),
+          minDays: number(estimatedDelivery.min_days) ?? 0,
+          maxDays: number(estimatedDelivery.max_days) ?? 0,
+        }
+      : null,
     cod: d.cod
-      ? { eligible: cod.eligible === true, fee: number(cod.fee) ?? 0, reason: string(cod.reason) || null }
+      ? {
+          eligible: cod.eligible === true,
+          fee: number(cod.fee) ?? 0,
+          reason: string(cod.reason) || null,
+          code: string(cod.code) || null,
+          minOrder: number(cod.min_order),
+          maxOrder: number(cod.max_order),
+          advanceEnabled: cod.advance_enabled === true,
+          advancePercent: number(cod.advance_percent) ?? 0,
+        }
       : null,
   };
 }
@@ -99,13 +128,20 @@ export function parseCartSummary(value: unknown): CartSummary {
 export async function fetchCart(
   direct = false,
   addressId?: string,
+  paymentMethod?: 'cod' | 'razorpay',
   signal?: AbortSignal,
 ): Promise<CartSummary> {
   const path = direct
     ? 'site/inventory/product/temp-carts'
     : 'site/inventory/product/carts';
   const res = await api.get(path, {
-    params: { currency: 'INR', ...(addressId ? { address_id: addressId } : {}) },
+    params: {
+      currency: 'INR',
+      ...(addressId ? { address_id: addressId } : {}),
+      ...(addressId && paymentMethod === 'cod'
+        ? { payment_method: 'cod' }
+        : {}),
+    },
     signal,
   });
   return parseCartSummary(res.data?.data);
@@ -126,17 +162,24 @@ export async function manageCart(
 }
 
 export type CouponResult = {
+  code: string;
   discount: number;
   subtotal: number;
   total: number;
 };
-export async function applyCoupon(code: string): Promise<CouponResult> {
+export async function applyCoupon(
+  code: string,
+  direct = false,
+): Promise<CouponResult> {
   const res = await api.post('site/inventory/product/cart/apply-coupon', {
     code,
     currency: 'INR',
+    isDirectCheckout: direct,
   });
   const d = record(res.data?.data);
+  const coupon = record(d.coupon);
   return {
+    code: string(coupon.code) || code.trim().toUpperCase(),
     discount: number(d.discount) ?? 0,
     subtotal: number(d.subtotal) ?? 0,
     total: number(d.total) ?? 0,

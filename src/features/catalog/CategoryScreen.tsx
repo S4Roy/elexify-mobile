@@ -3,10 +3,12 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { AppText, Button, Feedback } from '../../components/ui';
 import {
+  CategoryGridSkeleton,
   CategoryTile,
   ProductCard,
   ProductGridSkeleton,
   ShopHeader,
+  SkeletonBlock,
   StoreImage,
   shop,
 } from '../../components/shop';
@@ -16,6 +18,20 @@ import { QueryState } from './QueryState';
 import { apiConfig } from '../../api/config';
 import type { Category } from '../../api/discovery';
 import { theme } from '../../theme';
+
+/** Shimmering placeholder matching the parent-category rail (circle badge + label), shown while the top-level categories are first loading. */
+function ParentRailSkeleton() {
+  return (
+    <View accessibilityLabel="Loading categories">
+      {[0, 1, 2, 3, 4].map(item => (
+        <View key={item} style={styles.parent}>
+          <SkeletonBlock style={styles.circleSkeleton} />
+          <SkeletonBlock style={styles.parentTextSkeleton} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function CategoryScreen() {
   const roots = useCategories({ type: 'parent' });
@@ -48,13 +64,13 @@ export default function CategoryScreen() {
         pending={roots.isPending || (!!current && children.isPending)}
         error={roots.error ?? children.error}
         paused={
-          roots.fetchStatus === 'paused' ||
-          children.fetchStatus === 'paused'
+          roots.fetchStatus === 'paused' || children.fetchStatus === 'paused'
         }
         retry={() => {
           roots.refetch().catch(() => undefined);
           children.refetch().catch(() => undefined);
         }}
+        skeleton={<CategoryGridSkeleton />}
       />
       {current && (
         <>
@@ -102,58 +118,64 @@ export default function CategoryScreen() {
     <View style={shop.page}>
       <ShopHeader />
       <View style={styles.body}>
-        <FlatList
-          style={styles.rail}
-          data={parents}
-          keyExtractor={item => item.id}
-          showsVerticalScrollIndicator={false}
-          onEndReachedThreshold={0.4}
-          onEndReached={() => {
-            if (roots.hasNextPage && !roots.isFetchingNextPage) {
-              roots.fetchNextPage().catch(() => undefined);
+        {roots.isPending ? (
+          <View style={styles.rail}>
+            <ParentRailSkeleton />
+          </View>
+        ) : (
+          <FlatList
+            style={styles.rail}
+            data={parents}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            onEndReachedThreshold={0.4}
+            onEndReached={() => {
+              if (roots.hasNextPage && !roots.isFetchingNextPage) {
+                roots.fetchNextPage().catch(() => undefined);
+              }
+            }}
+            renderItem={({ item }) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active?.id === item.id }}
+                accessibilityLabel={item.name}
+                onPress={() => {
+                  setSelected(item);
+                  setTrail([]);
+                }}
+                style={[styles.parent, active?.id === item.id && styles.active]}
+              >
+                <StoreImage
+                  uri={item.image}
+                  label={item.name}
+                  style={styles.circle}
+                />
+                <AppText numberOfLines={2} style={styles.parentText}>
+                  {item.name}
+                </AppText>
+              </Pressable>
+            )}
+            ListFooterComponent={
+              <>
+                {roots.isFetchNextPageError && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry loading more categories"
+                    onPress={() => {
+                      roots.fetchNextPage().catch(() => undefined);
+                    }}
+                    style={styles.railRetry}
+                  >
+                    <AppText style={styles.railRetryText}>Retry</AppText>
+                  </Pressable>
+                )}
+                {roots.isFetchingNextPage && (
+                  <AppText style={styles.railLoading}>Loading…</AppText>
+                )}
+              </>
             }
-          }}
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: active?.id === item.id }}
-              accessibilityLabel={item.name}
-              onPress={() => {
-                setSelected(item);
-                setTrail([]);
-              }}
-              style={[styles.parent, active?.id === item.id && styles.active]}
-            >
-              <StoreImage
-                uri={item.image}
-                label={item.name}
-                style={styles.circle}
-              />
-              <AppText numberOfLines={2} style={styles.parentText}>
-                {item.name}
-              </AppText>
-            </Pressable>
-          )}
-          ListFooterComponent={
-            <>
-              {roots.isFetchNextPageError && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry loading more categories"
-                  onPress={() => {
-                    roots.fetchNextPage().catch(() => undefined);
-                  }}
-                  style={styles.railRetry}
-                >
-                  <AppText style={styles.railRetryText}>Retry</AppText>
-                </Pressable>
-              )}
-              {roots.isFetchingNextPage && (
-                <AppText style={styles.railLoading}>Loading…</AppText>
-              )}
-            </>
-          }
-        />
+          />
+        )}
         {showProducts ? (
           <View style={styles.children}>
             {backToParent}
@@ -222,7 +244,9 @@ export default function CategoryScreen() {
                       />
                     )}
                     {products.isFetchingNextPage && (
-                      <AppText style={shop.muted}>Loading more products…</AppText>
+                      <AppText style={shop.muted}>
+                        Loading more products…
+                      </AppText>
                     )}
                   </>
                 }
@@ -258,9 +282,14 @@ export default function CategoryScreen() {
               </View>
             )}
             ListEmptyComponent={
-              !roots.isPending && !roots.error && !children.isPending && !children.error ? (
+              !roots.isPending &&
+              !roots.error &&
+              !children.isPending &&
+              !children.error ? (
                 <Feedback
-                  title={current ? 'Explore this collection' : 'No categories yet'}
+                  title={
+                    current ? 'Explore this collection' : 'No categories yet'
+                  }
                   message={
                     current
                       ? 'View all products in this category above.'
@@ -318,6 +347,18 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: '#FFFFFF',
+  },
+  circleSkeleton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  parentTextSkeleton: {
+    width: 46,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
   railLoading: {
     color: '#FFFFFF',

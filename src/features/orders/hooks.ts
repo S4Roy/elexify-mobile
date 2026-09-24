@@ -1,8 +1,18 @@
 import { useEffect } from 'react';
 import * as StoreReview from 'expo-store-review';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
-import { cancelOrder, fetchOrderDetail, fetchOrders } from '../../api/order';
+import {
+  cancelOrder,
+  fetchOrderDetail,
+  fetchOrders,
+  retryOrderPayment,
+} from '../../api/order';
 import { createReturn, type ReturnType } from '../../api/returns';
 import { uploadMedia, type PickedImage } from '../../api/media';
 import { useSession } from '../../stores/session';
@@ -32,7 +42,8 @@ export function useOrderDetail(id: string) {
 
 export function useDownloadInvoice(orderNumber: string) {
   return useMutation({
-    mutationFn: (orderId: string) => downloadAndShareInvoice(orderId, orderNumber),
+    mutationFn: (orderId: string) =>
+      downloadAndShareInvoice(orderId, orderNumber),
   });
 }
 
@@ -47,7 +58,9 @@ export function useSubmitReturn(orderId: string) {
       images: PickedImage[];
       submissionKey: string;
     }) => {
-      const uploaded = params.images.length ? await uploadMedia(params.images, 'return') : [];
+      const uploaded = params.images.length
+        ? await uploadMedia(params.images, 'return')
+        : [];
       await createReturn({
         orderId,
         items: params.items,
@@ -59,7 +72,9 @@ export function useSubmitReturn(orderId: string) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['order-detail', orderId] }).catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: ['order-detail', orderId] })
+        .catch(() => undefined);
     },
   });
 }
@@ -90,6 +105,12 @@ export function useMaybePromptReview(orderStatus: string | undefined) {
   }, [orderStatus, canPrompt, recordPrompt]);
 }
 
+export function useRetryPayment() {
+  return useMutation({
+    mutationFn: (orderId: string) => retryOrderPayment(orderId),
+  });
+}
+
 export function useCancelOrder(id: string) {
   const identity = useIdentity();
   const queryClient = useQueryClient();
@@ -97,8 +118,12 @@ export function useCancelOrder(id: string) {
     mutationFn: (params: { reason: string; comment?: string }) =>
       cancelOrder({ orderId: id, ...params }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['order-detail', id] }).catch(() => undefined);
-      queryClient.invalidateQueries({ queryKey: ['orders', identity] }).catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: ['order-detail', id] })
+        .catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: ['orders', identity] })
+        .catch(() => undefined);
     },
   });
 }

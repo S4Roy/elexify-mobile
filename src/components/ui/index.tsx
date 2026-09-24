@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TextProps,
   View,
 } from 'react-native';
@@ -18,10 +19,14 @@ export function Button({
   label,
   onPress,
   disabled = false,
+  variant = 'primary',
+  icon,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  variant?: 'primary' | 'secondary';
+  icon?: React.ReactNode;
 }) {
   return (
     <Pressable
@@ -31,11 +36,74 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        variant === 'secondary' && styles.buttonSecondary,
         pressed && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
-      <AppText style={styles.buttonText}>{label}</AppText>
+      {icon}
+      <AppText
+        style={[
+          styles.buttonText,
+          variant === 'secondary' && styles.buttonTextSecondary,
+        ]}
+      >
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+/** Boxed one-time-code input: a single hidden TextInput (so paste and SMS
+ * autofill work normally) rendered as separate digit boxes for a modern feel. */
+export function OtpInput({
+  value,
+  onChange,
+  length = 6,
+  autoFocus,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  length?: number;
+  autoFocus?: boolean;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
+  const activeIndex = Math.min(value.length, length - 1);
+  return (
+    <Pressable
+      accessibilityRole="none"
+      onPress={() => inputRef.current?.focus()}
+      style={otpStyles.row}
+    >
+      {Array.from({ length }, (_, index) => value[index] ?? '').map(
+        (digit, index) => (
+          <View
+            key={index}
+            style={[
+              otpStyles.box,
+              !!digit && otpStyles.boxFilled,
+              focused && index === activeIndex && otpStyles.boxActive,
+            ]}
+          >
+            <AppText style={otpStyles.digit}>{digit}</AppText>
+          </View>
+        ),
+      )}
+      <TextInput
+        ref={inputRef}
+        accessibilityLabel="OTP"
+        value={value}
+        onChangeText={v => onChange(v.replace(/\D/g, '').slice(0, length))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        keyboardType="number-pad"
+        maxLength={length}
+        autoFocus={autoFocus}
+        textContentType="oneTimeCode"
+        autoComplete="sms-otp"
+        caretHidden
+        style={otpStyles.hiddenInput}
+      />
     </Pressable>
   );
 }
@@ -125,14 +193,53 @@ export const styles = StyleSheet.create({
     borderRadius: theme.radius.button,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
     backgroundColor: theme.colors.primary,
   },
+  buttonSecondary: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+  },
   buttonText: { color: '#FFFFFF', fontFamily: theme.fonts.medium },
+  buttonTextSecondary: { color: theme.colors.text },
   pressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
   disabled: { opacity: 0.5 },
   skeleton: {
     height: 24,
     borderRadius: 8,
     backgroundColor: theme.colors.border,
+  },
+});
+const otpStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 10, position: 'relative' },
+  box: {
+    width: 46,
+    height: 54,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  boxFilled: {
+    borderColor: theme.colors.primaryDark,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  boxActive: { borderColor: theme.colors.primary, borderWidth: 2 },
+  digit: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 20,
+    color: theme.colors.text,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0,
   },
 });

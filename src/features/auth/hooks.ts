@@ -19,7 +19,9 @@ function ensureGoogleConfigured() {
   googleConfigured = true;
   GoogleSignin.configure({
     webClientId: googleConfig.webClientId,
-    ...(googleConfig.iosClientId ? { iosClientId: googleConfig.iosClientId } : {}),
+    ...(googleConfig.iosClientId
+      ? { iosClientId: googleConfig.iosClientId }
+      : {}),
   });
 }
 
@@ -47,7 +49,9 @@ export function useGoogleSignIn() {
       }
       ensureGoogleConfigured();
       try {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        await GoogleSignin.hasPlayServices({
+          showPlayServicesUpdateDialog: true,
+        });
         const response = await GoogleSignin.signIn();
         if (!isSuccessResponse(response)) {
           return null;
@@ -68,10 +72,22 @@ export function useGoogleSignIn() {
             return null;
           }
           if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-            throw new ApiError('Google Play Services is unavailable on this device.');
+            throw new ApiError(
+              'Google Play Services is unavailable on this device.',
+            );
           }
         }
-        throw error;
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        // Anything else here is a native SDK/config error (e.g. an
+        // unregistered OAuth client) — never surface that raw text to users.
+        if (__DEV__) {
+          console.warn('Google Sign-In failed', error);
+        }
+        throw new ApiError(
+          "Google Sign-In isn't available right now. Please continue with your mobile number.",
+        );
       }
     },
   });

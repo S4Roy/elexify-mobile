@@ -1,10 +1,23 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppText, Button, Feedback } from '../../components/ui';
-import { AddToCartControl, StoreImage, money, shop } from '../../components/shop';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText, Button } from '../../components/ui';
+import {
+  AddToCartControl,
+  CartSkeleton,
+  ShopHeader,
+  StoreImage,
+  money,
+  shop,
+} from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
@@ -18,7 +31,11 @@ function WishlistButton({ item }: { item: CartItem }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={added ? `${item.name} added to wishlist` : `Add ${item.name} to wishlist`}
+      accessibilityLabel={
+        added
+          ? `${item.name} added to wishlist`
+          : `Add ${item.name} to wishlist`
+      }
       disabled={toggle.isPending || added}
       onPress={() =>
         toggle.mutate(
@@ -30,15 +47,16 @@ function WishlistButton({ item }: { item: CartItem }) {
     >
       <Ionicons
         name={added ? 'heart' : 'heart-outline'}
-        size={18}
-        color={added ? '#FF9A29' : '#FF9A29'}
+        size={17}
+        color={added ? '#FF9A29' : theme.colors.secondary}
       />
     </Pressable>
   );
 }
 
 function Row({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
-  const overStock = item.stockQuantity !== null && item.quantity > item.stockQuantity;
+  const overStock =
+    item.stockQuantity !== null && item.quantity > item.stockQuantity;
   const inStock = item.stockQuantity === null || item.stockQuantity > 0;
   const hasQuantityDiscount = !!item.discountPercent && item.price !== null;
   const goToProduct = () =>
@@ -51,8 +69,8 @@ function Row({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
     });
   return (
     <View style={styles.card}>
+      <WishlistButton item={item} />
       <View style={styles.topRow}>
-        <View style={styles.checkedBox}><Ionicons name="checkmark" size={14} color="#FFFFFF" /></View>
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`View ${item.name}`}
@@ -62,11 +80,12 @@ function Row({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
           <StoreImage uri={item.image} label={item.name} style={styles.image} />
         </Pressable>
         <View style={styles.infoCol}>
-          <WishlistButton item={item} />
-          <Pressable accessibilityRole="link" accessibilityLabel={`View ${item.name}`} onPress={goToProduct}>
-            <AppText numberOfLines={2} style={styles.productName}>
-              {item.name}
-            </AppText>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`View ${item.name}`}
+            onPress={goToProduct}
+          >
+            <AppText style={styles.productName}>{item.name}</AppText>
           </Pressable>
           <View style={styles.priceRow}>
             <AppText style={shop.price}>
@@ -74,10 +93,17 @@ function Row({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
             </AppText>
             {inStock ? (
               <AddToCartControl
-                product={{ id: item.productId, variationId: item.variationId, name: item.name, inStock }}
+                product={{
+                  id: item.productId,
+                  variationId: item.variationId,
+                  name: item.name,
+                  inStock,
+                }}
                 variant="cart"
               />
-            ) : <AppText style={styles.warning}>Out of stock</AppText>}
+            ) : (
+              <AppText style={styles.warning}>Out of stock</AppText>
+            )}
           </View>
           {hasQuantityDiscount && (
             <AppText style={styles.discountLabel}>
@@ -101,8 +127,17 @@ function Row({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
           <Ionicons name="trash-outline" size={18} color="#FF5272" />
           <AppText style={styles.removeText}>Remove from cart</AppText>
         </Pressable>
-        <Pressable accessibilityRole="link" accessibilityLabel={`Buy ${item.name}`} onPress={goToProduct} style={styles.buyAction}>
-          <Ionicons name="cart-outline" size={20} color={theme.colors.primary} />
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Buy ${item.name}`}
+          onPress={goToProduct}
+          style={styles.buyAction}
+        >
+          <Ionicons
+            name="cart-outline"
+            size={20}
+            color={theme.colors.primary}
+          />
           <AppText style={styles.buyText}>Buy this product</AppText>
         </Pressable>
       </View>
@@ -118,32 +153,27 @@ export default function CartScreen() {
   const [code, setCode] = useState('');
   const insets = useSafeAreaInsets();
   const data = cart.data;
-  const itemCount = data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const itemCount =
+    data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
 
   const removeItem = (item: CartItem) => {
-    mutation.mutate({ productId: item.productId, variationId: item.variationId, quantity: 0 });
+    mutation.mutate({
+      productId: item.productId,
+      variationId: item.variationId,
+      quantity: 0,
+    });
   };
 
   return (
     <View style={[shop.page, styles.page]}>
-      <SafeAreaView edges={['top']} style={styles.headerSafe}>
-        <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
-            <Ionicons name="chevron-back" size={24} color={theme.colors.primary} />
-          </Pressable>
-          <AppText style={styles.headerTitle}>Cart</AppText>
-          <Pressable accessibilityRole="button" accessibilityLabel="Search products" onPress={() => router.push('/search')} style={styles.headerSearch}>
-            <Ionicons name="search-outline" size={23} color="#626A70" />
-          </Pressable>
-          <Ionicons name="cart-outline" size={27} color="#626A70" />
-          <Ionicons name="notifications-outline" size={27} color="#626A70" />
-        </View>
-      </SafeAreaView>
-      <View style={styles.shippingBanner}>
-        <Ionicons name="car-outline" size={20} color="#FFFFFF" />
-        <AppText style={styles.shippingText}>FREE shipping on ₹ 500.00+</AppText>
-      </View>
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ShopHeader title="Cart" back />
+      <ScrollView
+        contentContainerStyle={[
+          styles.body,
+          data && data.items.length > 0 && styles.bodyWithStickyBar,
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         <QueryState
           pending={cart.isPending}
           error={cart.error}
@@ -151,6 +181,7 @@ export default function CartScreen() {
           retry={() => {
             cart.refetch().catch(() => undefined);
           }}
+          skeleton={<CartSkeleton />}
         />
         {mutation.isError && (
           <AppText accessibilityRole="alert" style={styles.warning}>
@@ -158,18 +189,45 @@ export default function CartScreen() {
           </AppText>
         )}
         {data && data.items.length === 0 && (
-          <>
-            <Feedback title="Your cart is empty" message="Add items to get started." />
-            <Button label="Continue shopping" onPress={() => router.push('/')} />
-          </>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons
+                name="cart-outline"
+                size={42}
+                color={theme.colors.primary}
+              />
+            </View>
+            <AppText style={styles.emptyTitle}>Your cart is empty</AppText>
+            <AppText style={[shop.muted, styles.emptyMessage]}>
+              Looks like you haven't added anything yet. Explore the store and
+              find something you'll love.
+            </AppText>
+            <View style={styles.emptyActions}>
+              <Button
+                label="Continue shopping"
+                onPress={() => router.push('/')}
+              />
+            </View>
+          </View>
         )}
         {data && data.items.length > 0 && (
           <>
-            {data.items.map(item => (
-              <Row key={item.id} item={item} onRemove={() => removeItem(item)} />
-            ))}
+            <View style={styles.hero}>
+              <AppText style={styles.eyebrow}>Shopping Bag</AppText>
+              <AppText style={styles.heroTitle}>Your Cart</AppText>
+              <AppText style={styles.lead}>
+                {itemCount} {itemCount === 1 ? 'item' : 'items'} ready for
+                checkout.
+              </AppText>
+            </View>
 
-            <AppText style={styles.sectionTitle}>Previously Bought</AppText>
+            {data.items.map(item => (
+              <Row
+                key={item.id}
+                item={item}
+                onRemove={() => removeItem(item)}
+              />
+            ))}
 
             <View style={styles.summaryCard}>
               {isAuthenticated ? (
@@ -199,7 +257,8 @@ export default function CartScreen() {
               )}
               {coupon.data && (
                 <AppText style={shop.muted}>
-                  Coupon applied: −{money(coupon.data.discount)}. New total {money(coupon.data.total)}.
+                  Coupon applied: −{money(coupon.data.discount)}. New total{' '}
+                  {money(coupon.data.total)}.
                 </AppText>
               )}
             </View>
@@ -207,39 +266,83 @@ export default function CartScreen() {
             <View style={styles.summaryCard}>
               <View style={shop.between}>
                 <AppText style={shop.muted}>MRP / Subtotal</AppText>
-                <AppText style={styles.summaryValue}>{money(data.mrpSubtotal)}</AppText>
+                <AppText style={styles.summaryValue}>
+                  {money(data.mrpSubtotal)}
+                </AppText>
               </View>
               {data.productDiscount > 0 && (
                 <View style={shop.between}>
-                  <AppText style={styles.discountLabel}>Product Discount</AppText>
-                  <AppText style={styles.discountLabel}>−{money(data.productDiscount)}</AppText>
+                  <AppText style={styles.discountLabel}>
+                    Product Discount
+                  </AppText>
+                  <AppText style={styles.discountLabel}>
+                    −{money(data.productDiscount)}
+                  </AppText>
                 </View>
               )}
               {data.quantityDiscount > 0 && (
                 <View style={shop.between}>
-                  <AppText style={styles.discountLabel}>Buy More Save More</AppText>
-                  <AppText style={styles.discountLabel}>−{money(data.quantityDiscount)}</AppText>
+                  <AppText style={styles.discountLabel}>
+                    Buy More Save More
+                  </AppText>
+                  <AppText style={styles.discountLabel}>
+                    −{money(data.quantityDiscount)}
+                  </AppText>
                 </View>
               )}
               <View style={shop.between}>
-                <AppText style={styles.shippingLabel}>Shipping &amp; delivery</AppText>
-                <AppText style={styles.shippingValue}>Calculated at checkout</AppText>
+                <AppText style={styles.shippingLabel}>
+                  Shipping &amp; delivery
+                </AppText>
+                <AppText style={styles.shippingValue}>
+                  Calculated at checkout
+                </AppText>
               </View>
               <View style={[shop.between, styles.payableRow]}>
                 <AppText style={styles.payableLabel}>Amount Payable</AppText>
-                <AppText style={styles.payableLabel}>{money(data.subtotal)}</AppText>
+                <AppText style={styles.payableLabel}>
+                  {money(data.subtotal)}
+                </AppText>
               </View>
+              {data.productDiscount + data.quantityDiscount > 0 && (
+                <View style={styles.savingsBanner}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={14}
+                    color={theme.colors.primary}
+                  />
+                  <AppText style={styles.savingsText}>
+                    You saved{' '}
+                    {money(data.productDiscount + data.quantityDiscount)} on
+                    this order!
+                  </AppText>
+                </View>
+              )}
             </View>
           </>
         )}
       </ScrollView>
       {data && data.items.length > 0 && (
-        <View style={[styles.stickyBar, { paddingBottom: Math.max(8, insets.bottom) }]}>
+        <View
+          style={[
+            styles.stickyBar,
+            { paddingBottom: Math.max(8, insets.bottom) },
+          ]}
+        >
           <View style={styles.flex}>
-            <AppText style={styles.itemCount}>{itemCount} {itemCount === 1 ? 'Item' : 'Items'}</AppText>
+            <AppText style={styles.itemCount}>
+              {itemCount} {itemCount === 1 ? 'Item' : 'Items'}
+            </AppText>
             <AppText style={styles.total}>{money(data.subtotal)}</AppText>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Checkout" onPress={() => router.push(isAuthenticated ? '/checkout' : '/login')} style={styles.checkoutButton}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Checkout"
+            onPress={() =>
+              router.push(isAuthenticated ? '/checkout' : '/login')
+            }
+            style={styles.checkoutButton}
+          >
             <AppText style={styles.checkoutText}>Checkout</AppText>
           </Pressable>
         </View>
@@ -249,13 +352,36 @@ export default function CartScreen() {
 }
 const styles = StyleSheet.create({
   page: { backgroundColor: '#FFFFFF' },
-  headerSafe: { backgroundColor: '#EFFFFE' },
-  header: { height: 64, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 18 },
-  headerTitle: { flex: 1, fontSize: 17, color: theme.colors.primary },
-  headerSearch: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  shippingBanner: { height: 60, backgroundColor: '#006F65', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  shippingText: { color: '#FFFFFF', fontFamily: theme.fonts.medium, fontSize: 14 },
-  body: { paddingHorizontal: 16, paddingTop: 38, gap: 15, flexGrow: 1, paddingBottom: 110 },
+  body: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 15,
+    flexGrow: 1,
+  },
+  bodyWithStickyBar: { paddingBottom: 110 },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 40,
+  },
+  emptyIcon: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontFamily: theme.fonts.bold,
+    fontSize: 20,
+    color: theme.colors.text,
+  },
+  emptyMessage: { textAlign: 'center', maxWidth: 300 },
+  emptyActions: { alignSelf: 'stretch', paddingHorizontal: 24, marginTop: 8 },
   flex: { flex: 1, paddingLeft: 32 },
   card: {
     position: 'relative',
@@ -273,20 +399,37 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: '#ECEFF4',
   },
-  checkedBox: { position: 'absolute', top: 5, left: 5, zIndex: 2, width: 17, height: 17, borderRadius: 3, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
-  infoCol: { flex: 1, justifyContent: 'space-between', paddingTop: 22 },
+  infoCol: { flex: 1, justifyContent: 'space-between', paddingTop: 2 },
   wishlistButton: {
     position: 'absolute',
-    top: -20,
-    right: 0,
+    top: 8,
+    right: 8,
     width: 30,
     height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1,
+    backgroundColor: '#FFFFFF',
+    zIndex: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  productName: { color: '#30343A', fontFamily: theme.fonts.medium, fontSize: 15, lineHeight: 22 },
-  priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 4 },
+  productName: {
+    color: '#30343A',
+    fontFamily: theme.fonts.medium,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
   discountLabel: {
     color: '#16A34A',
     fontFamily: theme.fonts.semibold,
@@ -321,8 +464,51 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   buyText: { color: theme.colors.primary, fontSize: 13 },
-  sectionTitle: { marginTop: 14, marginBottom: 10, color: '#30343A', fontFamily: theme.fonts.semibold, fontSize: 18 },
-  summaryCard: { padding: 14, gap: 10, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: '#FFFFFF' },
+  hero: {
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: 16,
+    padding: 18,
+    gap: 6,
+  },
+  eyebrow: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontFamily: theme.fonts.bold,
+    fontSize: 22,
+    color: theme.colors.text,
+  },
+  lead: {
+    color: theme.colors.secondary,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  summaryCard: {
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  savingsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: 8,
+    padding: 8,
+  },
+  savingsText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontFamily: theme.fonts.medium,
+  },
   warning: { color: theme.colors.danger, fontSize: 13, marginTop: 2 },
   couponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   couponInput: {
@@ -342,7 +528,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   shippingLabel: { color: theme.colors.secondary, fontSize: 12 },
-  shippingValue: { color: theme.colors.secondary, fontSize: 12, fontStyle: 'italic' },
+  shippingValue: {
+    color: theme.colors.secondary,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
   payableRow: {
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
@@ -355,7 +545,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   itemCount: { color: '#526384', fontSize: 14 },
-  total: { fontFamily: theme.fonts.semibold, fontSize: 21, color: theme.colors.primary },
+  total: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 21,
+    color: theme.colors.primary,
+  },
   stickyBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -367,6 +561,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  checkoutButton: { width: '50%', alignSelf: 'stretch', backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
-  checkoutText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 17 },
+  checkoutButton: {
+    width: '50%',
+    alignSelf: 'stretch',
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkoutText: {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 17,
+  },
 });

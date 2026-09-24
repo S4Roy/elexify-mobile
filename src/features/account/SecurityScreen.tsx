@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AppText, Button, Feedback } from '../../components/ui';
+import { AppText, Button, Feedback, OtpInput } from '../../components/ui';
 import { ShopHeader, shop } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
@@ -21,13 +29,23 @@ const otpPattern = /^\d{6}$/;
 
 function VerifiedBadge({ verified }: { verified: boolean }) {
   return (
-    <View style={[styles.badge, verified ? styles.badgeVerified : styles.badgeUnverified]}>
+    <View
+      style={[
+        styles.badge,
+        verified ? styles.badgeVerified : styles.badgeUnverified,
+      ]}
+    >
       <Ionicons
         name={verified ? 'checkmark-circle' : 'close-circle'}
         size={12}
         color={verified ? theme.colors.primary : theme.colors.danger}
       />
-      <AppText style={[styles.badgeText, { color: verified ? theme.colors.primary : theme.colors.danger }]}>
+      <AppText
+        style={[
+          styles.badgeText,
+          { color: verified ? theme.colors.primary : theme.colors.danger },
+        ]}
+      >
         {verified ? 'Verified' : 'Unverified'}
       </AppText>
     </View>
@@ -81,7 +99,8 @@ function ChangeContactCard({
   const sendOtp = () => {
     setError('');
     const trimmed = value.trim();
-    const mutate = channel === 'email' ? requestEmail.mutate : requestMobile.mutate;
+    const mutate =
+      channel === 'email' ? requestEmail.mutate : requestMobile.mutate;
     mutate(trimmed, {
       onSuccess: () => {
         setOtp('');
@@ -93,7 +112,8 @@ function ChangeContactCard({
   };
   const submitOtp = () => {
     setError('');
-    const mutate = channel === 'email' ? verifyEmail.mutate : verifyMobile.mutate;
+    const mutate =
+      channel === 'email' ? verifyEmail.mutate : verifyMobile.mutate;
     mutate(otp, {
       onSuccess: () => setStep('idle'),
       onError: err => setError(err.message),
@@ -116,7 +136,9 @@ function ChangeContactCard({
           <AppText style={styles.value} numberOfLines={1}>
             {current || 'Not set'}
           </AppText>
-          {!!pending && <AppText style={styles.pending}>Change pending: {pending}</AppText>}
+          {!!pending && (
+            <AppText style={styles.pending}>Change pending: {pending}</AppText>
+          )}
         </View>
         <VerifiedBadge verified={verified} />
         {step === 'idle' && (
@@ -131,8 +153,14 @@ function ChangeContactCard({
           <TextInput
             accessibilityLabel={`New ${label.toLowerCase()}`}
             value={value}
-            onChangeText={channel === 'mobile' ? v => setValue(v.replace(/\D/g, '')) : setValue}
-            placeholder={channel === 'email' ? 'you@example.com' : '10-digit mobile number'}
+            onChangeText={
+              channel === 'mobile'
+                ? v => setValue(v.replace(/\D/g, ''))
+                : setValue
+            }
+            placeholder={
+              channel === 'email' ? 'you@example.com' : '10-digit mobile number'
+            }
             placeholderTextColor={theme.colors.secondary}
             keyboardType={channel === 'email' ? 'email-address' : 'number-pad'}
             maxLength={channel === 'mobile' ? 10 : undefined}
@@ -158,18 +186,10 @@ function ChangeContactCard({
 
       {step === 'otp' && (
         <View style={styles.form}>
-          <AppText style={shop.muted}>Enter the 6-digit code sent to your new {label.toLowerCase()}</AppText>
-          <TextInput
-            accessibilityLabel="OTP"
-            value={otp}
-            onChangeText={v => setOtp(v.replace(/\D/g, ''))}
-            placeholder="6-digit code"
-            placeholderTextColor={theme.colors.secondary}
-            keyboardType="number-pad"
-            maxLength={6}
-            autoFocus
-            style={styles.input}
-          />
+          <AppText style={shop.muted}>
+            Enter the 6-digit code sent to your new {label.toLowerCase()}
+          </AppText>
+          <OtpInput value={otp} onChange={setOtp} autoFocus />
           {!!error && <AppText style={styles.error}>{error}</AppText>}
           <Button
             label={verifying.isPending ? 'Verifying…' : 'Verify'}
@@ -177,10 +197,17 @@ function ChangeContactCard({
             onPress={submitOtp}
           />
           <View style={shop.between}>
-            <Pressable accessibilityRole="button" onPress={() => setStep('enter')}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setStep('enter')}
+            >
               <AppText style={shop.link}>Back</AppText>
             </Pressable>
-            <Pressable accessibilityRole="button" disabled={cooldown > 0} onPress={onResend}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={cooldown > 0}
+              onPress={onResend}
+            >
               <AppText style={[shop.link, cooldown > 0 && styles.disabledLink]}>
                 {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend OTP'}
               </AppText>
@@ -202,7 +229,9 @@ function PasswordCard() {
   const changePassword = useChangePassword();
 
   const canSubmit =
-    currentPassword.length > 0 && password.length >= 6 && password === confirmPassword;
+    currentPassword.length > 0 &&
+    password.length >= 6 &&
+    password === confirmPassword;
 
   const submit = () => {
     setError('');
@@ -240,7 +269,9 @@ function PasswordCard() {
           </Pressable>
         )}
       </View>
-      {success && <AppText style={styles.success}>Password changed successfully.</AppText>}
+      {success && (
+        <AppText style={styles.success}>Password changed successfully.</AppText>
+      )}
       {showForm && (
         <View style={styles.form}>
           <TextInput
@@ -274,7 +305,9 @@ function PasswordCard() {
           <View style={styles.row}>
             <View style={shop.flex}>
               <Button
-                label={changePassword.isPending ? 'Updating…' : 'Update password'}
+                label={
+                  changePassword.isPending ? 'Updating…' : 'Update password'
+                }
                 disabled={!canSubmit || changePassword.isPending}
                 onPress={submit}
               />
@@ -295,8 +328,14 @@ export default function SecurityScreen() {
   return (
     <View style={shop.page}>
       <ShopHeader title="Security" back />
-      <KeyboardAvoidingView style={shop.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={shop.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+        >
           <QueryState
             pending={account.isPending}
             error={account.error}
@@ -306,7 +345,10 @@ export default function SecurityScreen() {
             }}
           />
           {!account.isPending && !account.isError && !account.data && (
-            <Feedback title="Unable to load your details" message="Please try again." />
+            <Feedback
+              title="Unable to load your details"
+              message="Please try again."
+            />
           )}
           {account.data && (
             <>
@@ -318,7 +360,11 @@ export default function SecurityScreen() {
               />
               <ChangeContactCard
                 channel="mobile"
-                current={account.data.mobile ? `+${account.data.phoneCode} ${account.data.mobile}` : null}
+                current={
+                  account.data.mobile
+                    ? `+${account.data.phoneCode} ${account.data.mobile}`
+                    : null
+                }
                 verified={account.data.mobileVerified}
                 pending={account.data.pendingMobile}
               />
@@ -353,7 +399,13 @@ const styles = StyleSheet.create({
   badgeVerified: { backgroundColor: theme.colors.primaryLight },
   badgeUnverified: { backgroundColor: '#FEF3E7' },
   badgeText: { fontFamily: theme.fonts.medium, fontSize: 11 },
-  form: { gap: 10, marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  form: {
+    gap: 10,
+    marginTop: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
   input: {
     minHeight: 48,
     borderWidth: 1,

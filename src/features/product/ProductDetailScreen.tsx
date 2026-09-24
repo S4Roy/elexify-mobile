@@ -3,8 +3,10 @@ import {
   Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   TextInput,
   useWindowDimensions,
@@ -18,7 +20,9 @@ import { AppText, Button, Feedback } from '../../components/ui';
 import {
   AddToCartControl,
   Chip,
+  ProductCard,
   ShopHeader,
+  SkeletonBlock,
   StarRating,
   StoreImage,
   WishlistHeart,
@@ -27,15 +31,19 @@ import {
 } from '../../components/shop';
 import { openWebsite, websiteProductUrl } from '../catalog/links';
 import { QueryState } from '../catalog/QueryState';
+import { uniqueProducts } from '../catalog/filters';
 import { plainText } from '../../utils/html';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
 import { useCompareStore } from '../../stores/compare';
 import { useRecentlyViewed } from '../../stores/recentlyViewed';
-import { useCart } from '../cart/hooks';
+import { useRecentProducts } from '../recentlyViewed/hooks';
+import { useCart, useCartMutation } from '../cart/hooks';
+import type { Product } from '../../api/discovery';
 import type { QuantityDiscount } from '../../api/productDetail';
 import type { PickedImage } from '../../api/media';
 import {
+  useAlsoLike,
   useDeliveryCheck,
   useProductDetail,
   useReviews,
@@ -46,7 +54,13 @@ import { matchVariation, selectionsFor } from './variant';
 
 const MAX_REVIEW_IMAGES = 5;
 
-function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function StarPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <View style={shop.row}>
       {[1, 2, 3, 4, 5].map(star => (
@@ -116,9 +130,13 @@ function QuantityDiscountList({
           >
             <View style={[styles.tierDot, isActive && styles.tierDotActive]} />
             <View style={styles.flex}>
-              <AppText style={isActive ? styles.tierTextActive : styles.tierText}>
+              <AppText
+                style={isActive ? styles.tierTextActive : styles.tierText}
+              >
                 Buy from {label} items and get{' '}
-                <AppText style={styles.tierPercent}>{tier.discountPercent}% OFF</AppText>
+                <AppText style={styles.tierPercent}>
+                  {tier.discountPercent}% OFF
+                </AppText>
               </AppText>
               <AppText style={styles.tierHint}>on each product</AppText>
               {isActive && (
@@ -138,6 +156,88 @@ function QuantityDiscountList({
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value ?? '';
+
+/** Shimmering placeholder matching the product page's real layout (hero image, title, price, sections), shown while the product is first loading. */
+function ProductDetailSkeleton() {
+  return (
+    <View accessibilityLabel="Loading product">
+      <SkeletonBlock style={styles.heroSkeleton} />
+      <View style={[styles.thumbRow, styles.skeletonRow]}>
+        {[0, 1, 2, 3].map(item => (
+          <SkeletonBlock key={item} style={styles.thumb} />
+        ))}
+      </View>
+      <View style={styles.section}>
+        <SkeletonBlock style={styles.skeletonLineNarrow} />
+        <SkeletonBlock style={styles.skeletonLineWide} />
+        <SkeletonBlock style={styles.skeletonLineMedium} />
+      </View>
+      <View style={styles.section}>
+        <SkeletonBlock style={styles.skeletonPriceLine} />
+        <SkeletonBlock style={styles.skeletonLineNarrow} />
+      </View>
+      <View style={styles.section}>
+        <SkeletonBlock style={styles.skeletonLineNarrow} />
+        <View style={styles.wrap}>
+          {[0, 1, 2].map(item => (
+            <SkeletonBlock key={item} style={styles.skeletonChip} />
+          ))}
+        </View>
+      </View>
+      <View style={styles.section}>
+        <SkeletonBlock style={styles.skeletonLineWide} />
+        <SkeletonBlock style={styles.skeletonLineWide} />
+        <SkeletonBlock style={styles.skeletonLineMedium} />
+      </View>
+    </View>
+  );
+}
+
+/** Horizontal shelf of related products (also-like / recently viewed), matching the web PDP's rail sections. Renders nothing once loaded with no items. */
+function ProductRail({
+  title,
+  subtitle,
+  pending,
+  items,
+}: {
+  title: string;
+  subtitle: string;
+  pending: boolean;
+  items: Product[];
+}) {
+  if (!pending && items.length === 0) {
+    return null;
+  }
+  return (
+    <View style={styles.section}>
+      <AppText style={shop.heading}>{title}</AppText>
+      <AppText style={shop.muted}>{subtitle}</AppText>
+      {pending ? (
+        <View style={[styles.railRow, styles.skeletonRow]}>
+          {[0, 1, 2].map(item => (
+            <View key={item} style={styles.railCard}>
+              <SkeletonBlock style={styles.railSkeletonImage} />
+              <SkeletonBlock style={styles.skeletonLineWide} />
+              <SkeletonBlock style={styles.skeletonLineMedium} />
+            </View>
+          ))}
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.railRow}
+        >
+          {items.map(item => (
+            <View key={item.key} style={styles.railCard}>
+              <ProductCard product={item} />
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
 
 export default function ProductDetailScreen() {
   const route = useLocalSearchParams<{ slug: string; variation_id?: string }>();
@@ -164,18 +264,30 @@ export default function ProductDetailScreen() {
     }
   }
 
-  const variation = data ? matchVariation(data.variations, selected) : undefined;
+  const variation = data
+    ? matchVariation(data.variations, selected)
+    : undefined;
   const requiresVariation = !!data && data.attributes.length > 0;
   const resolved = requiresVariation ? variation : undefined;
-  const images = (resolved?.images.length ? resolved.images : data?.images) ?? [];
+  const images =
+    (resolved?.images.length ? resolved.images : data?.images) ?? [];
   const price = resolved ? resolved.price : data?.price ?? null;
-  const regularPrice = resolved ? resolved.regularPrice : data?.regularPrice ?? null;
-  const stockQuantity = resolved ? resolved.stockQuantity : data?.stockQuantity ?? null;
-  const askForPrice = resolved ? resolved.askForPrice : data?.askForPrice ?? false;
+  const regularPrice = resolved
+    ? resolved.regularPrice
+    : data?.regularPrice ?? null;
+  const stockQuantity = resolved
+    ? resolved.stockQuantity
+    : data?.stockQuantity ?? null;
+  const askForPrice = resolved
+    ? resolved.askForPrice
+    : data?.askForPrice ?? false;
   const inStock = stockQuantity === null || stockQuantity > 0;
   const canBuy = !requiresVariation || !!variation;
   const hasDiscount =
-    !askForPrice && regularPrice !== null && price !== null && regularPrice > price;
+    !askForPrice &&
+    regularPrice !== null &&
+    price !== null &&
+    regularPrice > price;
   const discountPercent = hasDiscount
     ? Math.round(((regularPrice! - price!) / regularPrice!) * 100)
     : 0;
@@ -193,6 +305,18 @@ export default function ProductDetailScreen() {
 
   const specs = useSpecifications(slug);
   const reviews = useReviews(data?.id, resolved?.id);
+  const alsoLike = useAlsoLike(slug);
+  const recentIds = useRecentlyViewed(s => s.ids).filter(id => id !== data?.id);
+  const recentOrder = useMemo(
+    () => new Map(recentIds.map((id, index) => [id, index])),
+    [recentIds],
+  );
+  const recentProducts = useRecentProducts(recentIds);
+  const recentItems = uniqueProducts(recentProducts.data?.items ?? [])
+    .filter(item => recentOrder.has(item.id))
+    .sort(
+      (a, b) => (recentOrder.get(a.id) ?? 0) - (recentOrder.get(b.id) ?? 0),
+    );
   const cart = useCart();
   const cartItem = data
     ? cart.data?.items.find(
@@ -203,7 +327,9 @@ export default function ProductDetailScreen() {
   const currentQty = cartItem?.quantity ?? 1;
   const activeDiscountTierIndex = quantityDiscounts.findIndex((tier, index) => {
     const next = quantityDiscounts[index + 1];
-    return currentQty >= tier.minQuantity && (!next || currentQty < next.minQuantity);
+    return (
+      currentQty >= tier.minQuantity && (!next || currentQty < next.minQuantity)
+    );
   });
   const isAuthenticated = useSession(s => s.status === 'authenticated');
   const [myRating, setMyRating] = useState(0);
@@ -223,8 +349,13 @@ export default function ProductDetailScreen() {
       setCompareError('');
       return;
     }
-    const result = addToCompare({ productId: data.id, categoryId: data.categories[0]?.id });
-    setCompareError(result.ok ? '' : result.message ?? 'Unable to add to comparison.');
+    const result = addToCompare({
+      productId: data.id,
+      categoryId: data.categories[0]?.id,
+    });
+    setCompareError(
+      result.ok ? '' : result.message ?? 'Unable to add to comparison.',
+    );
   };
 
   const pickReviewImages = async () => {
@@ -256,6 +387,42 @@ export default function ProductDetailScreen() {
     return websiteProductUrl({ slug: data.slug, variationId: resolved?.id });
   }, [data, resolved]);
 
+  const buyNowMutation = useCartMutation(true);
+  const onBuyNow = () => {
+    if (!data) {
+      return;
+    }
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    buyNowMutation.mutate(
+      { productId: data.id, variationId: resolved?.id, quantity: currentQty },
+      {
+        onSuccess: () =>
+          router.push({
+            pathname: '/checkout',
+            params: { buyNow: '1' },
+          }),
+      },
+    );
+  };
+
+  const onShare = async () => {
+    if (!buyUrl || !data) {
+      return;
+    }
+    try {
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { title: data.name, url: buyUrl }
+          : { title: data.name, message: `${data.name}\n${buyUrl}` },
+      );
+    } catch {
+      // User dismissed the share sheet — nothing to surface.
+    }
+  };
+
   const onHeroScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / winWidth);
     setActiveImage(index);
@@ -281,6 +448,7 @@ export default function ProductDetailScreen() {
           retry={() => {
             product.refetch().catch(() => undefined);
           }}
+          skeleton={<ProductDetailSkeleton />}
         />
         {data && (
           <>
@@ -301,12 +469,43 @@ export default function ProductDetailScreen() {
                   />
                 ))}
               </ScrollView>
+              {hasDiscount && (
+                <View style={styles.heroDiscountBadge}>
+                  <AppText style={styles.discountText}>
+                    -{discountPercent}%
+                  </AppText>
+                </View>
+              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Share ${data.name}`}
+                onPress={onShare}
+                style={styles.heroShareButton}
+              >
+                <Ionicons
+                  name="share-social-outline"
+                  size={17}
+                  color={theme.colors.secondary}
+                />
+              </Pressable>
+              <WishlistHeart
+                product={{
+                  id: data.id,
+                  variationId: resolved?.id,
+                  inWishlist: data.inWishlist,
+                  name: data.name,
+                }}
+                size={20}
+              />
               {images.length > 1 && (
                 <View style={styles.dotsRow} pointerEvents="none">
                   {images.map((_, index) => (
                     <View
                       key={index}
-                      style={[styles.dot, index === activeImage && styles.dotActive]}
+                      style={[
+                        styles.dot,
+                        index === activeImage && styles.dotActive,
+                      ]}
                     />
                   ))}
                 </View>
@@ -325,7 +524,10 @@ export default function ProductDetailScreen() {
                     accessibilityLabel={`View photo ${index + 1}`}
                     accessibilityState={{ selected: index === activeImage }}
                     onPress={() => goToImage(index)}
-                    style={[styles.thumb, index === activeImage && styles.thumbActive]}
+                    style={[
+                      styles.thumb,
+                      index === activeImage && styles.thumbActive,
+                    ]}
                   >
                     <StoreImage uri={uri} label="" style={styles.thumbImage} />
                   </Pressable>
@@ -335,15 +537,24 @@ export default function ProductDetailScreen() {
 
             <View style={styles.section}>
               {!!data.categories[0] && (
-                <AppText style={shop.categoryLabel}>{data.categories[0].name}</AppText>
+                <AppText style={shop.categoryLabel}>
+                  {data.categories[0].name}
+                </AppText>
               )}
               <View style={[shop.row, styles.titleRow]}>
-                <AppText accessibilityRole="header" style={[styles.title, styles.flex]}>
+                <AppText
+                  accessibilityRole="header"
+                  style={[styles.title, styles.flex]}
+                >
                   {data.name}
                 </AppText>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={compared ? `Remove ${data.name} from comparison` : `Compare ${data.name}`}
+                  accessibilityLabel={
+                    compared
+                      ? `Remove ${data.name} from comparison`
+                      : `Compare ${data.name}`
+                  }
                   accessibilityState={{ selected: compared }}
                   onPress={toggleCompare}
                   hitSlop={6}
@@ -352,21 +563,15 @@ export default function ProductDetailScreen() {
                   <Ionicons
                     name={compared ? 'checkmark-circle' : 'git-compare-outline'}
                     size={24}
-                    color={compared ? theme.colors.primary : theme.colors.secondary}
+                    color={
+                      compared ? theme.colors.primary : theme.colors.secondary
+                    }
                   />
                 </Pressable>
-                <WishlistHeart
-                  product={{
-                    id: data.id,
-                    variationId: resolved?.id,
-                    inWishlist: data.inWishlist,
-                    name: data.name,
-                  }}
-                  size={26}
-                  overlay={false}
-                />
               </View>
-              {!!compareError && <AppText style={styles.outOfStock}>{compareError}</AppText>}
+              {!!compareError && (
+                <AppText style={styles.outOfStock}>{compareError}</AppText>
+              )}
               {data.rating !== null && data.rating > 0 && (
                 <View style={[shop.row, styles.ratingRow]}>
                   <StarRating value={data.rating} size={15} />
@@ -376,7 +581,9 @@ export default function ProductDetailScreen() {
                   </AppText>
                 </View>
               )}
-              {!!data.sku && <AppText style={shop.muted}>SKU: {data.sku}</AppText>}
+              {!!data.sku && (
+                <AppText style={shop.muted}>SKU: {data.sku}</AppText>
+              )}
             </View>
 
             <View style={styles.section}>
@@ -389,28 +596,45 @@ export default function ProductDetailScreen() {
                       {price === null ? 'Price unavailable' : money(price)}
                     </AppText>
                     {hasDiscount && (
-                      <AppText style={styles.wasLarge}>{money(regularPrice!)}</AppText>
+                      <AppText style={styles.wasLarge}>
+                        {money(regularPrice!)}
+                      </AppText>
                     )}
                     {hasDiscount && (
                       <View style={styles.discountBadge}>
-                        <AppText style={styles.discountText}>-{discountPercent}%</AppText>
+                        <AppText style={styles.discountText}>
+                          -{discountPercent}%
+                        </AppText>
                       </View>
                     )}
                   </View>
                   {hasDiscount && (
                     <AppText style={styles.savings}>
-                      You save {money(regularPrice! - price!)} ({discountPercent}%)
+                      You save {money(regularPrice! - price!)} (
+                      {discountPercent}%)
                     </AppText>
                   )}
                 </>
               )}
-              <AppText style={inStock ? shop.muted : styles.outOfStock}>
-                {!canBuy
-                  ? 'Select all options to check availability.'
-                  : inStock
-                  ? 'In stock'
-                  : 'Out of stock'}
-              </AppText>
+              {!canBuy ? (
+                <AppText style={shop.muted}>
+                  Select all options to check availability.
+                </AppText>
+              ) : (
+                <View style={styles.stockRow}>
+                  <View
+                    style={[
+                      styles.stockDot,
+                      inStock ? styles.stockDotIn : styles.stockDotOut,
+                    ]}
+                  />
+                  <AppText
+                    style={inStock ? styles.stockInText : styles.outOfStock}
+                  >
+                    {inStock ? 'In stock' : 'Out of stock'}
+                  </AppText>
+                </View>
+              )}
             </View>
 
             {!askForPrice && quantityDiscounts.length > 0 && (
@@ -433,7 +657,10 @@ export default function ProductDetailScreen() {
                       label={value.name}
                       selected={selected[attribute.id] === value.id}
                       onPress={() =>
-                        setSelected(current => ({ ...current, [attribute.id]: value.id }))
+                        setSelected(current => ({
+                          ...current,
+                          [attribute.id]: value.id,
+                        }))
                       }
                     />
                   ))}
@@ -468,8 +695,11 @@ export default function ProductDetailScreen() {
               {delivery.data && (
                 <AppText style={shop.muted}>
                   {delivery.data.isAvailable
-                    ? `Delivery by ${delivery.data.deliveryDisplay || 'soon'} · ${
-                        delivery.data.shippingAmount === 0 || delivery.data.shippingAmount === null
+                    ? `Delivery by ${
+                        delivery.data.deliveryDisplay || 'soon'
+                      } · ${
+                        delivery.data.shippingAmount === 0 ||
+                        delivery.data.shippingAmount === null
                           ? 'Free delivery'
                           : money(delivery.data.shippingAmount)
                       }`
@@ -477,7 +707,9 @@ export default function ProductDetailScreen() {
                 </AppText>
               )}
               {delivery.isError && (
-                <AppText style={styles.outOfStock}>{delivery.error.message}</AppText>
+                <AppText style={styles.outOfStock}>
+                  {delivery.error.message}
+                </AppText>
               )}
             </View>
 
@@ -492,7 +724,10 @@ export default function ProductDetailScreen() {
                 {specs.data.map((spec, index) => (
                   <View
                     key={spec.id}
-                    style={[styles.specRow, index % 2 === 1 && styles.specRowAlt]}
+                    style={[
+                      styles.specRow,
+                      index % 2 === 1 && styles.specRowAlt,
+                    ]}
                   >
                     <AppText style={styles.specLabel}>{spec.label}</AppText>
                     <AppText style={styles.specValue}>{spec.value}</AppText>
@@ -522,11 +757,18 @@ export default function ProductDetailScreen() {
                   <View style={styles.reviewImages}>
                     {myImages.map((image, index) => (
                       <View key={image.uri} style={styles.reviewImageThumbWrap}>
-                        <Image source={{ uri: image.uri }} style={styles.reviewImageThumb} />
+                        <Image
+                          source={{ uri: image.uri }}
+                          style={styles.reviewImageThumb}
+                        />
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel="Remove photo"
-                          onPress={() => setMyImages(current => current.filter((_, i) => i !== index))}
+                          onPress={() =>
+                            setMyImages(current =>
+                              current.filter((_, i) => i !== index),
+                            )
+                          }
                           style={styles.reviewImageRemove}
                         >
                           <Ionicons name="close" size={12} color="#FFFFFF" />
@@ -540,16 +782,26 @@ export default function ProductDetailScreen() {
                         onPress={pickReviewImages}
                         style={styles.reviewImageAdd}
                       >
-                        <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
+                        <Ionicons
+                          name="camera-outline"
+                          size={20}
+                          color={theme.colors.primary}
+                        />
                       </Pressable>
                     )}
                   </View>
                   <Button
-                    label={submitRating.isPending ? 'Submitting…' : 'Submit review'}
+                    label={
+                      submitRating.isPending ? 'Submitting…' : 'Submit review'
+                    }
                     disabled={myRating < 1 || submitRating.isPending}
                     onPress={() => {
                       submitRating.mutate(
-                        { rating: myRating, description: myReview.trim(), images: myImages },
+                        {
+                          rating: myRating,
+                          description: myReview.trim(),
+                          images: myImages,
+                        },
                         {
                           onSuccess: () => {
                             setMyRating(0);
@@ -561,14 +813,21 @@ export default function ProductDetailScreen() {
                     }}
                   />
                   {submitRating.isError && (
-                    <AppText style={styles.outOfStock}>{submitRating.error.message}</AppText>
+                    <AppText style={styles.outOfStock}>
+                      {submitRating.error.message}
+                    </AppText>
                   )}
                   {submitRating.isSuccess && (
-                    <AppText style={shop.muted}>Thanks for your review!</AppText>
+                    <AppText style={shop.muted}>
+                      Thanks for your review!
+                    </AppText>
                   )}
                 </View>
               ) : (
-                <Pressable accessibilityRole="button" onPress={() => router.push('/login')}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/login')}
+                >
                   <AppText style={shop.link}>Sign in to write a review</AppText>
                 </Pressable>
               )}
@@ -584,17 +843,40 @@ export default function ProductDetailScreen() {
                     {'★'.repeat(review.rating)}
                     {'☆'.repeat(5 - review.rating)} · {review.userName}
                   </AppText>
-                  {!!review.description && <AppText>{review.description}</AppText>}
+                  {!!review.description && (
+                    <AppText>{review.description}</AppText>
+                  )}
                   {review.media.length > 0 && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.reviewMediaRow}
+                    >
                       {review.media.map((uri, index) => (
-                        <Image key={uri + index} source={{ uri }} style={styles.reviewMediaThumb} />
+                        <Image
+                          key={uri + index}
+                          source={{ uri }}
+                          style={styles.reviewMediaThumb}
+                        />
                       ))}
                     </ScrollView>
                   )}
                 </View>
               ))}
             </View>
+
+            <ProductRail
+              title="You May Also Like"
+              subtitle="Frequently bought together with this product"
+              pending={alsoLike.isPending}
+              items={alsoLike.data ?? []}
+            />
+            <ProductRail
+              title="Recently Viewed"
+              subtitle="Pick up where you left off"
+              pending={recentIds.length > 0 && recentProducts.isPending}
+              items={recentItems}
+            />
           </>
         )}
         {!product.isPending && !product.isError && !data && (
@@ -605,14 +887,26 @@ export default function ProductDetailScreen() {
         )}
       </ScrollView>
       {data && (
-        <View style={[styles.stickyBar, { paddingBottom: Math.max(12, insets.bottom) }]}>
+        <View
+          style={[
+            styles.stickyBar,
+            { paddingBottom: Math.max(12, insets.bottom) },
+          ]}
+        >
           {askForPrice ? (
             <View style={styles.flex}>
-              <Button label="Contact us for pricing" onPress={() => buyUrl && openWebsite(buyUrl)} />
+              <Button
+                label="Contact us for pricing"
+                onPress={() => buyUrl && openWebsite(buyUrl)}
+              />
             </View>
           ) : !canBuy ? (
             <View style={styles.flex}>
-              <Button label="Select options above" disabled onPress={() => undefined} />
+              <Button
+                label="Select options above"
+                disabled
+                onPress={() => undefined}
+              />
             </View>
           ) : !inStock ? (
             <View style={styles.flex}>
@@ -621,11 +915,20 @@ export default function ProductDetailScreen() {
           ) : (
             <>
               <AddToCartControl
-                product={{ id: data.id, variationId: resolved?.id, name: data.name, inStock }}
+                product={{
+                  id: data.id,
+                  variationId: resolved?.id,
+                  name: data.name,
+                  inStock,
+                }}
                 variant="full"
               />
               <View style={styles.flex}>
-                <Button label="Buy now" onPress={() => buyUrl && openWebsite(buyUrl)} />
+                <Button
+                  label={buyNowMutation.isPending ? 'Preparing…' : 'Buy now'}
+                  disabled={buyNowMutation.isPending}
+                  onPress={onBuyNow}
+                />
               </View>
             </>
           )}
@@ -638,8 +941,38 @@ const styles = StyleSheet.create({
   page: { backgroundColor: '#F4F5F7' },
   body: { paddingBottom: 120, gap: 4 },
   flex: { flex: 1 },
+  heroSkeleton: { width: '100%', aspectRatio: 1, borderRadius: 0 },
+  skeletonLineNarrow: { height: 12, width: '30%' },
+  skeletonLineWide: { height: 15, width: '90%' },
+  skeletonLineMedium: { height: 15, width: '55%' },
+  skeletonPriceLine: { height: 26, width: '45%' },
+  skeletonChip: { height: 40, width: 84, borderRadius: 20 },
+  skeletonRow: { flexDirection: 'row' },
+  railRow: { gap: 12 },
+  railCard: { width: 150, gap: 6 },
+  railSkeletonImage: { width: '100%', aspectRatio: 1.15, borderRadius: 12 },
   heroWrap: { position: 'relative', backgroundColor: '#FFFFFF' },
   hero: { aspectRatio: 1, backgroundColor: '#F0F1F3' },
+  heroShareButton: {
+    position: 'absolute',
+    top: 6,
+    right: 46,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  heroDiscountBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: theme.colors.danger,
+  },
   dotsRow: {
     position: 'absolute',
     bottom: 10,
@@ -682,9 +1015,21 @@ const styles = StyleSheet.create({
   ratingRow: { alignItems: 'center', gap: 8 },
   compareButton: { paddingHorizontal: 4 },
   priceRow: { alignItems: 'center', gap: 10 },
-  price: { color: theme.colors.primary, fontFamily: theme.fonts.bold, fontSize: 24 },
-  wasLarge: { color: theme.colors.secondary, textDecorationLine: 'line-through', fontSize: 16 },
-  savings: { color: theme.colors.primary, fontFamily: theme.fonts.medium, fontSize: 13 },
+  price: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.bold,
+    fontSize: 24,
+  },
+  wasLarge: {
+    color: theme.colors.secondary,
+    textDecorationLine: 'line-through',
+    fontSize: 16,
+  },
+  savings: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+    fontSize: 13,
+  },
   discountBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -716,7 +1061,11 @@ const styles = StyleSheet.create({
   tierDotActive: { backgroundColor: theme.colors.primary },
   tierText: { fontSize: 12, lineHeight: 18, color: theme.colors.secondary },
   tierTextActive: { fontSize: 12, lineHeight: 18, color: theme.colors.text },
-  tierPercent: { fontFamily: theme.fonts.semibold, fontSize: 12, color: theme.colors.text },
+  tierPercent: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    color: theme.colors.text,
+  },
   tierHint: { fontSize: 11, color: theme.colors.secondary, marginTop: 1 },
   tierAppliedBadge: {
     alignSelf: 'flex-start',
@@ -733,6 +1082,15 @@ const styles = StyleSheet.create({
   },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   outOfStock: { color: theme.colors.danger },
+  stockRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stockDot: { width: 7, height: 7, borderRadius: 4 },
+  stockDotIn: { backgroundColor: theme.colors.primary },
+  stockDotOut: { backgroundColor: theme.colors.danger },
+  stockInText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+    fontSize: 13,
+  },
   pincode: {
     flex: 1,
     minHeight: 48,
@@ -744,13 +1102,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
   },
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   accordionBody: { gap: 10 },
-  specRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, gap: 12 },
+  specRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 10,
+    gap: 12,
+  },
   specRowAlt: { backgroundColor: '#F4F5F7', borderRadius: 8 },
   specLabel: { color: theme.colors.secondary, flex: 1 },
   specValue: { flex: 1, textAlign: 'right' },
-  review: { gap: 4, paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  review: {
+    gap: 4,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
   reviewForm: {
     gap: 10,
     padding: 12,
@@ -771,7 +1143,12 @@ const styles = StyleSheet.create({
   },
   reviewImages: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   reviewImageThumbWrap: { width: 60, height: 60 },
-  reviewImageThumb: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#F0F1F3' },
+  reviewImageThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#F0F1F3',
+  },
   reviewImageRemove: {
     position: 'absolute',
     top: -6,
@@ -794,7 +1171,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reviewMediaRow: { gap: 8, marginTop: 4 },
-  reviewMediaThumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#F0F1F3' },
+  reviewMediaThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: '#F0F1F3',
+  },
   stickyBar: {
     position: 'absolute',
     left: 0,
@@ -807,5 +1189,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
