@@ -16,7 +16,7 @@ import {
   packageStepReached,
   showsPackageProgress,
 } from './tracking';
-import { useCancelOrder, useDownloadInvoice, useOrderDetail } from './hooks';
+import { useCancelOrder, useDownloadInvoice, useMaybePromptReview, useOrderDetail } from './hooks';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
 
 const first = (value: string | string[] | undefined) =>
@@ -123,6 +123,7 @@ export default function OrderDetailScreen() {
   const id = first(route.id);
   const order = useOrderDetail(id);
   const data = order.data;
+  useMaybePromptReview(data?.orderStatus);
   const cancelOrder = useCancelOrder(id);
   const downloadInvoice = useDownloadInvoice(data?.orderNumber ?? '');
   const [cancelling, setCancelling] = useState(false);

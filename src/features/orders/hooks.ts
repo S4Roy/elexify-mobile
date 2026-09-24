@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
+import * as StoreReview from 'expo-store-review';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
 import { cancelOrder, fetchOrderDetail, fetchOrders } from '../../api/order';
 import { createReturn, type ReturnType } from '../../api/returns';
 import { uploadMedia, type PickedImage } from '../../api/media';
 import { useSession } from '../../stores/session';
+import { useReviewPromptStore } from '../../stores/reviewPrompt';
 import { useIdentity } from '../catalog/hooks';
 import { downloadAndShareInvoice } from './invoice';
 
@@ -59,6 +62,32 @@ export function useSubmitReturn(orderId: string) {
       queryClient.invalidateQueries({ queryKey: ['order-detail', orderId] }).catch(() => undefined);
     },
   });
+}
+
+/** Nudges for a store rating the moment an order is confirmed delivered — a
+ * genuinely positive point in the journey — throttled by useReviewPromptStore
+ * so we don't ask on every delivered order a user happens to open. */
+export function useMaybePromptReview(orderStatus: string | undefined) {
+  const canPrompt = useReviewPromptStore(s => s.canPrompt);
+  const recordPrompt = useReviewPromptStore(s => s.recordPrompt);
+  useEffect(() => {
+    if (orderStatus !== 'delivered' || !canPrompt()) {
+      return;
+    }
+    let cancelled = false;
+    StoreReview.isAvailableAsync()
+      .then(available => {
+        if (available && !cancelled) {
+          recordPrompt();
+          return StoreReview.requestReview();
+        }
+        return undefined;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [orderStatus, canPrompt, recordPrompt]);
 }
 
 export function useCancelOrder(id: string) {
