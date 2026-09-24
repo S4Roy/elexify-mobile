@@ -209,6 +209,7 @@ export type SubmitRatingParams = {
   variationId?: string;
   rating: number;
   description?: string;
+  media?: string[];
 };
 export async function submitRating(params: SubmitRatingParams): Promise<void> {
   await api.post('user/rating/add', {
@@ -216,6 +217,7 @@ export async function submitRating(params: SubmitRatingParams): Promise<void> {
     variation_id: params.variationId ?? null,
     rating: params.rating,
     description: params.description || undefined,
+    media: params.media?.length ? params.media : undefined,
   });
 }
 export async function fetchReviews(

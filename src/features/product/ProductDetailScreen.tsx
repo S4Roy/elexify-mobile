@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Button, Feedback } from '../../components/ui';
 import {
@@ -28,9 +30,11 @@ import { QueryState } from '../catalog/QueryState';
 import { plainText } from '../../utils/html';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
+import { useCompareStore } from '../../stores/compare';
 import { useRecentlyViewed } from '../../stores/recentlyViewed';
 import { useCart } from '../cart/hooks';
 import type { QuantityDiscount } from '../../api/productDetail';
+import type { PickedImage } from '../../api/media';
 import {
   useDeliveryCheck,
   useProductDetail,
@@ -39,6 +43,8 @@ import {
   useSubmitRating,
 } from './hooks';
 import { matchVariation, selectionsFor } from './variant';
+
+const MAX_REVIEW_IMAGES = 5;
 
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -202,7 +208,46 @@ export default function ProductDetailScreen() {
   const isAuthenticated = useSession(s => s.status === 'authenticated');
   const [myRating, setMyRating] = useState(0);
   const [myReview, setMyReview] = useState('');
+  const [myImages, setMyImages] = useState<PickedImage[]>([]);
   const submitRating = useSubmitRating(data?.id, resolved?.id);
+  const compared = useCompareStore(s => (data ? s.has(data.id) : false));
+  const addToCompare = useCompareStore(s => s.add);
+  const removeFromCompare = useCompareStore(s => s.remove);
+  const [compareError, setCompareError] = useState('');
+  const toggleCompare = () => {
+    if (!data) {
+      return;
+    }
+    if (compared) {
+      removeFromCompare(data.id);
+      setCompareError('');
+      return;
+    }
+    const result = addToCompare({ productId: data.id, categoryId: data.categories[0]?.id });
+    setCompareError(result.ok ? '' : result.message ?? 'Unable to add to comparison.');
+  };
+
+  const pickReviewImages = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_REVIEW_IMAGES - myImages.length,
+      quality: 0.8,
+    });
+    if (result.canceled) {
+      return;
+    }
+    const picked: PickedImage[] = result.assets.map((asset, index) => ({
+      uri: asset.uri,
+      name: asset.fileName || `review-${Date.now()}-${index}.jpg`,
+      mimeType: asset.mimeType || 'image/jpeg',
+    }));
+    setMyImages(current => [...current, ...picked].slice(0, MAX_REVIEW_IMAGES));
+  };
 
   const buyUrl = useMemo(() => {
     if (!data) {
@@ -296,6 +341,20 @@ export default function ProductDetailScreen() {
                 <AppText accessibilityRole="header" style={[styles.title, styles.flex]}>
                   {data.name}
                 </AppText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={compared ? `Remove ${data.name} from comparison` : `Compare ${data.name}`}
+                  accessibilityState={{ selected: compared }}
+                  onPress={toggleCompare}
+                  hitSlop={6}
+                  style={styles.compareButton}
+                >
+                  <Ionicons
+                    name={compared ? 'checkmark-circle' : 'git-compare-outline'}
+                    size={24}
+                    color={compared ? theme.colors.primary : theme.colors.secondary}
+                  />
+                </Pressable>
                 <WishlistHeart
                   product={{
                     id: data.id,
@@ -307,6 +366,7 @@ export default function ProductDetailScreen() {
                   overlay={false}
                 />
               </View>
+              {!!compareError && <AppText style={styles.outOfStock}>{compareError}</AppText>}
               {data.rating !== null && data.rating > 0 && (
                 <View style={[shop.row, styles.ratingRow]}>
                   <StarRating value={data.rating} size={15} />
@@ -456,16 +516,45 @@ export default function ProductDetailScreen() {
                     multiline
                     style={styles.reviewInput}
                   />
+                  <AppText style={shop.muted}>
+                    Add photos {`(optional, up to ${MAX_REVIEW_IMAGES})`}
+                  </AppText>
+                  <View style={styles.reviewImages}>
+                    {myImages.map((image, index) => (
+                      <View key={image.uri} style={styles.reviewImageThumbWrap}>
+                        <Image source={{ uri: image.uri }} style={styles.reviewImageThumb} />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Remove photo"
+                          onPress={() => setMyImages(current => current.filter((_, i) => i !== index))}
+                          style={styles.reviewImageRemove}
+                        >
+                          <Ionicons name="close" size={12} color="#FFFFFF" />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {myImages.length < MAX_REVIEW_IMAGES && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Add photo"
+                        onPress={pickReviewImages}
+                        style={styles.reviewImageAdd}
+                      >
+                        <Ionicons name="camera-outline" size={20} color={theme.colors.primary} />
+                      </Pressable>
+                    )}
+                  </View>
                   <Button
                     label={submitRating.isPending ? 'Submitting…' : 'Submit review'}
                     disabled={myRating < 1 || submitRating.isPending}
                     onPress={() => {
                       submitRating.mutate(
-                        { rating: myRating, description: myReview.trim() },
+                        { rating: myRating, description: myReview.trim(), images: myImages },
                         {
                           onSuccess: () => {
                             setMyRating(0);
                             setMyReview('');
+                            setMyImages([]);
                           },
                         },
                       );
@@ -479,7 +568,7 @@ export default function ProductDetailScreen() {
                   )}
                 </View>
               ) : (
-                <Pressable onPress={() => router.push('/login')}>
+                <Pressable accessibilityRole="button" onPress={() => router.push('/login')}>
                   <AppText style={shop.link}>Sign in to write a review</AppText>
                 </Pressable>
               )}
@@ -496,6 +585,13 @@ export default function ProductDetailScreen() {
                     {'☆'.repeat(5 - review.rating)} · {review.userName}
                   </AppText>
                   {!!review.description && <AppText>{review.description}</AppText>}
+                  {review.media.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>
+                      {review.media.map((uri, index) => (
+                        <Image key={uri + index} source={{ uri }} style={styles.reviewMediaThumb} />
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
               ))}
             </View>
@@ -584,6 +680,7 @@ const styles = StyleSheet.create({
   titleRow: { alignItems: 'flex-start' },
   title: { fontFamily: theme.fonts.bold, fontSize: 20, lineHeight: 27 },
   ratingRow: { alignItems: 'center', gap: 8 },
+  compareButton: { paddingHorizontal: 4 },
   priceRow: { alignItems: 'center', gap: 10 },
   price: { color: theme.colors.primary, fontFamily: theme.fonts.bold, fontSize: 24 },
   wasLarge: { color: theme.colors.secondary, textDecorationLine: 'line-through', fontSize: 16 },
@@ -672,6 +769,32 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlignVertical: 'top',
   },
+  reviewImages: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  reviewImageThumbWrap: { width: 60, height: 60 },
+  reviewImageThumb: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#F0F1F3' },
+  reviewImageRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.danger,
+  },
+  reviewImageAdd: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewMediaRow: { gap: 8, marginTop: 4 },
+  reviewMediaThumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#F0F1F3' },
   stickyBar: {
     position: 'absolute',
     left: 0,

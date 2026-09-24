@@ -7,6 +7,7 @@ import { ShopHeader, shop } from '../../src/components/shop';
 import { useAddresses } from '../../src/features/address/hooks';
 import { useAccount } from '../../src/features/auth/hooks';
 import { useWishlist } from '../../src/features/wishlist/hooks';
+import { useCompareStore } from '../../src/stores/compare';
 import { useSession } from '../../src/stores/session';
 import { theme } from '../../src/theme';
 
@@ -53,6 +54,7 @@ export default function Account() {
   const addresses = useAddresses();
   const wishlist = useWishlist();
   const wishlistCount = wishlist.data?.pages[0]?.total ?? 0;
+  const compareCount = useCompareStore(s => s.items.length);
   const preferred = addresses.data?.items.find(item => item.isDefault) ?? addresses.data?.items[0];
   const location = preferred
     ? [preferred.addressLine1, preferred.city.name, preferred.state.name].filter(Boolean).join(', ')
@@ -113,15 +115,34 @@ export default function Account() {
               <MenuRow icon="heart-outline" label="Wishlist" count={wishlistCount} onPress={() => router.push('/wishlist')} />
               <MenuRow icon="time-outline" label="Recently Viewed" onPress={() => router.push('/recently-viewed')} />
               <AppText style={[styles.sectionTitle, styles.groupTitle]}>Settings</AppText>
-              <MenuRow icon="settings-outline" label="Manage App" />
-              <AppText style={[styles.sectionTitle, styles.groupTitle]}>Other</AppText>
-              <MenuRow icon="help-circle-outline" label="FAQ’s" />
-              <Pressable accessibilityRole="button" onPress={() => signOut().catch(() => undefined)} style={styles.signOut}>
-                <AppText style={styles.signOutText}>Sign out</AppText>
-              </Pressable>
+              <MenuRow icon="person-outline" label="Profile" onPress={() => router.push('/account/profile')} />
+              <MenuRow icon="shield-checkmark-outline" label="Security" onPress={() => router.push('/account/security')} />
+              <MenuRow icon="notifications-outline" label="Notification Preferences" onPress={() => router.push('/account/preferences')} />
             </View>
           </>
         )}
+        {/* Compare doesn't require sign-in, so this row stays reachable for guests too. */}
+        <View style={styles.section}>
+          <AppText style={styles.sectionTitle}>Shop</AppText>
+          <MenuRow icon="git-compare-outline" label="Compare Products" count={compareCount} onPress={() => router.push('/compare')} />
+        </View>
+        {/* Support/legal links must be reachable without signing in — App Store
+            and Play Store review both require a reachable privacy policy. */}
+        <View style={styles.section}>
+          <AppText style={styles.sectionTitle}>Support</AppText>
+          <MenuRow icon="help-circle-outline" label="FAQs" onPress={() => router.push('/faq')} />
+          <MenuRow icon="mail-outline" label="Contact Us" onPress={() => router.push('/contact-us')} />
+          <AppText style={[styles.sectionTitle, styles.groupTitle]}>Legal</AppText>
+          <MenuRow icon="information-circle-outline" label="About Us" onPress={() => router.push({ pathname: '/legal/[slug]', params: { slug: 'about-us' } })} />
+          <MenuRow icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push({ pathname: '/legal/[slug]', params: { slug: 'privacy-policy' } })} />
+          <MenuRow icon="document-text-outline" label="Terms & Conditions" onPress={() => router.push({ pathname: '/legal/[slug]', params: { slug: 'terms-conditions' } })} />
+          <MenuRow icon="return-up-back-outline" label="Refund & Cancellation Policy" onPress={() => router.push({ pathname: '/legal/[slug]', params: { slug: 'refund-cancellations-policy' } })} />
+          {status === 'authenticated' && (
+            <Pressable accessibilityRole="button" onPress={() => signOut().catch(() => undefined)} style={styles.signOut}>
+              <AppText style={styles.signOutText}>Sign out</AppText>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
     </View>
   );

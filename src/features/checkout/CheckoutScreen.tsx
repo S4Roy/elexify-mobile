@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import RazorpayCheckout from 'react-native-razorpay';
+import RazorpayCheckout, { RazorpayError } from 'react-native-razorpay';
 import { AppText, Button, Feedback } from '../../components/ui';
 import { Chip, ShopHeader, money, shop } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
@@ -9,6 +9,7 @@ import { theme } from '../../theme';
 import { useAddresses } from '../address/hooks';
 import { useCart } from '../cart/hooks';
 import { clearIdempotencyKey, getIdempotencyKey, usePlaceOrder, useVerifyPayment } from './hooks';
+import { isRazorpayCancelled } from './friendlyReason';
 
 export default function CheckoutScreen() {
   const addresses = useAddresses();
@@ -47,8 +48,9 @@ export default function CheckoutScreen() {
         idempotencyKey,
       });
       if (result.razorpay) {
+        let payment;
         try {
-          const payment = await RazorpayCheckout.open({
+          payment = await RazorpayCheckout.open({
             key: result.razorpay.keyId,
             order_id: result.razorpay.orderId,
             amount: result.razorpay.amount,
@@ -61,6 +63,25 @@ export default function CheckoutScreen() {
             },
             theme: { color: theme.colors.primary },
           });
+        } catch (razorpayError) {
+          // The order already exists (pending payment), so route to the
+          // shared result screen rather than an inline error, matching the
+          // web storefront's cancelled/failure split.
+          const err = razorpayError as Partial<RazorpayError> | undefined;
+          const cancelled = isRazorpayCancelled(err);
+          await clearIdempotencyKey('cart');
+          router.replace({
+            pathname: '/checkout/[status]',
+            params: {
+              status: cancelled ? 'cancelled' : 'failure',
+              orderId: result.order.id,
+              orderNumber: result.order.orderNumber,
+              reason: err?.description || '',
+            },
+          });
+          return;
+        }
+        try {
           await verifyPayment.mutateAsync({
             orderNumber: result.order.orderNumber,
             razorpayPaymentId: payment.razorpay_payment_id,
@@ -69,19 +90,31 @@ export default function CheckoutScreen() {
           });
           await clearIdempotencyKey('cart');
           router.replace({
-            pathname: '/checkout/success',
-            params: { orderId: result.order.id, orderNumber: result.order.orderNumber },
+            pathname: '/checkout/[status]',
+            params: { status: 'success', orderId: result.order.id, orderNumber: result.order.orderNumber },
           });
-        } catch {
-          setError(
-            'Payment was not completed. Your order is saved — you can retry payment from Your orders.',
-          );
+        } catch (verifyError) {
+          await clearIdempotencyKey('cart');
+          router.replace({
+            pathname: '/checkout/[status]',
+            params: {
+              status: 'failure',
+              orderId: result.order.id,
+              orderNumber: result.order.orderNumber,
+              reason: verifyError instanceof Error ? verifyError.message : '',
+            },
+          });
         }
       } else {
         await clearIdempotencyKey('cart');
         router.replace({
-          pathname: '/checkout/success',
-          params: { orderId: result.order.id, orderNumber: result.order.orderNumber },
+          pathname: '/checkout/[status]',
+          params: {
+            status: 'success',
+            orderId: result.order.id,
+            orderNumber: result.order.orderNumber,
+            paymentMethod: 'cod',
+          },
         });
       }
     } catch (err) {

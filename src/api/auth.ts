@@ -73,6 +73,14 @@ export type Account = {
   lastName: string;
   email: string | null;
   mobile: string | null;
+  phoneCode: string;
+  dob: string | null;
+  gender: string | null;
+  profileImage: string | null;
+  emailVerified: boolean;
+  mobileVerified: boolean;
+  pendingEmail: string | null;
+  pendingMobile: string | null;
 };
 export async function fetchAccount(signal?: AbortSignal): Promise<Account> {
   const res = await api.get('user/account/details', { signal });
@@ -82,5 +90,13 @@ export async function fetchAccount(signal?: AbortSignal): Promise<Account> {
     lastName: string(d.last_name),
     email: string(d.email) || null,
     mobile: string(d.mobile) || null,
+    phoneCode: string(d.phone_code) || '91',
+    dob: string(d.dob) || null,
+    gender: string(d.gender) || null,
+    profileImage: string(d.profile_image) || null,
+    emailVerified: d.email_verified === true,
+    mobileVerified: d.mobile_verified === true,
+    pendingEmail: string(d.pending_email) || null,
+    pendingMobile: string(d.pending_mobile) || null,
   };
 }

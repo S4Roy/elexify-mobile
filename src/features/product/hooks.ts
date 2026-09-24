@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
+import { uploadMedia, type PickedImage } from '../../api/media';
 import {
   checkDelivery,
   fetchProductDetail,
@@ -34,8 +35,16 @@ export function useReviews(productId?: string, variationId?: string) {
 export function useSubmitRating(productId?: string, variationId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { rating: number; description?: string }) =>
-      submitRating({ productId: productId as string, variationId, ...params }),
+    mutationFn: async (params: { rating: number; description?: string; images?: PickedImage[] }) => {
+      const { images, ...rest } = params;
+      const media = images?.length ? await uploadMedia(images) : [];
+      return submitRating({
+        productId: productId as string,
+        variationId,
+        ...rest,
+        media: media.map(m => m.id),
+      });
+    },
     onSuccess: () => {
       queryClient
         .invalidateQueries({

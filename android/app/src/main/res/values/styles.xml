@@ -4,6 +4,11 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- Shown as the native window's background the instant the app
+             process starts, before JS has loaded — acts as the splash
+             screen. React Native's own views paint over it once the first
+             screen renders, so it's otherwise invisible during normal use. -->
+        <item name="android:windowBackground">@drawable/splash_background</item>
     </style>
 
 </resources>

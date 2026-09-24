@@ -151,6 +151,44 @@ export type OrderItem = {
   quantity: number;
   price: number | null;
 };
+
+export type PackageTrackingEvent = { status: string; occurredAt: string | null };
+
+export type OrderPackage = {
+  packageNumber: number;
+  referenceId: string | null;
+  status: string;
+  shiprocketStatus: string | null;
+  shiprocketStatusUpdatedAt: string | null;
+  courierName: string | null;
+  awb: string | null;
+  etd: string | null;
+  trackingUrl: string | null;
+  itemCount: number;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string | null;
+  trackingEvents: PackageTrackingEvent[];
+};
+
+// Orders placed before the multi-package Package model existed carry their
+// single shipment's tracking directly on the order — no `packages` entries.
+export type LegacyTracking = {
+  awb: string | null;
+  courierName: string | null;
+  etd: string | null;
+  shiprocketStatus: string | null;
+  shiprocketStatusUpdatedAt: string | null;
+};
+
+export type ReturnPolicy = {
+  enabled: boolean;
+  allowed: boolean;
+  windowDays: number;
+  requireImages: boolean;
+  reasons: string[];
+};
+
 export type OrderDetail = OrderSummary & {
   items: OrderItem[];
   shipping: number | null;
@@ -158,7 +196,41 @@ export type OrderDetail = OrderSummary & {
   codFee: number | null;
   note: string;
   cancellation: { allowed: boolean; reason: string | null };
+  returns: ReturnPolicy;
+  packages: OrderPackage[];
+  legacyTracking: LegacyTracking | null;
+  invoiceGenerated: boolean;
 };
+
+function parseTrackingEvent(value: unknown): PackageTrackingEvent {
+  const e = record(value);
+  return { status: string(e.status), occurredAt: string(e.occurred_at) || null };
+}
+
+export function parsePackage(value: unknown): OrderPackage | null {
+  const p = record(value);
+  const packageNumber = number(p.package_number);
+  if (packageNumber === null || !string(p.status)) {
+    return null;
+  }
+  const events = Array.isArray(p.tracking_events) ? p.tracking_events.map(parseTrackingEvent) : [];
+  return {
+    packageNumber,
+    referenceId: string(p.reference_id) || null,
+    status: string(p.status),
+    shiprocketStatus: string(p.shiprocket_status) || null,
+    shiprocketStatusUpdatedAt: string(p.shiprocket_status_updated_at) || null,
+    courierName: string(p.courier_name) || null,
+    awb: string(p.awb) || null,
+    etd: string(p.etd) || null,
+    trackingUrl: string(p.tracking_url) || null,
+    itemCount: number(p.item_count) ?? 0,
+    shippedAt: string(p.shipped_at) || null,
+    deliveredAt: string(p.delivered_at) || null,
+    createdAt: string(p.created_at) || null,
+    trackingEvents: events,
+  };
+}
 
 export const CANCELLATION_REASONS = [
   'Ordered by mistake',
@@ -211,6 +283,25 @@ export async function fetchOrderDetail(
   });
   const capabilities = record(o.capabilities);
   const cancellation = record(capabilities.cancellation);
+  const returnPolicy = record(capabilities.returns);
+  const returnReasons = Array.isArray(returnPolicy.reasons)
+    ? returnPolicy.reasons.filter((r): r is string => typeof r === 'string')
+    : [];
+  const packages = Array.isArray(o.packages)
+    ? o.packages.map(parsePackage).filter((p): p is OrderPackage => p !== null)
+    : [];
+  const legacyAwb = string(o.awb);
+  const legacyTracking: LegacyTracking | null =
+    !packages.length && legacyAwb
+      ? {
+          awb: legacyAwb,
+          courierName: string(o.courier_name) || null,
+          etd: string(o.etd) || null,
+          shiprocketStatus: string(o.shiprocket_status) || null,
+          shiprocketStatusUpdatedAt: string(o.shiprocket_status_updated_at) || null,
+        }
+      : null;
+  const invoice = record(o.invoice);
   return {
     ...summary,
     items,
@@ -222,5 +313,23 @@ export async function fetchOrderDetail(
       allowed: cancellation.allowed === true,
       reason: string(cancellation.reason) || null,
     },
+    returns: {
+      enabled: returnPolicy.enabled === true,
+      allowed: returnPolicy.allowed === true,
+      windowDays: number(returnPolicy.window_days) ?? 0,
+      requireImages: returnPolicy.require_images === true,
+      reasons: returnReasons,
+    },
+    packages,
+    legacyTracking,
+    invoiceGenerated: invoice.generated === true,
   };
+}
+
+export async function fetchInvoicePdf(orderId: string): Promise<ArrayBuffer> {
+  const res = await api.get('site/inventory/order/invoice', {
+    params: { order_id: orderId },
+    responseType: 'arraybuffer',
+  });
+  return res.data as ArrayBuffer;
 }
