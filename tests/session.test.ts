@@ -65,3 +65,16 @@ test('a queued login wins over slow initialization', async () => {
   await Promise.all([hydration, login]);
   expect(useSession.getState().token).toBe('new-token');
 });
+
+test('push cleanup runs with the previous identity before logout and account switching', async () => {
+  const { setPushCleanup } = require('../src/platform/pushLifecycle');
+  const identities: (string | null)[] = [];
+  const remove = setPushCleanup(async () => { identities.push(useSession.getState().token); });
+  try {
+    await useSession.getState().signIn('account-a');
+    await useSession.getState().signIn('account-b');
+    await useSession.getState().signOut();
+    expect(identities).toEqual(['account-a', 'account-b']);
+    expect(useSession.getState().token).toBeNull();
+  } finally { remove(); }
+});

@@ -56,7 +56,7 @@ export type NotificationPreferences = {
     refund_sms: boolean;
   };
   security: { email: boolean; sms: boolean };
-  marketing: { email: boolean; sms: boolean; whatsapp: boolean };
+  marketing: { email: boolean; sms: boolean; whatsapp: boolean; push: boolean };
   reminders: {
     abandoned_cart_email: boolean;
     abandoned_cart_whatsapp: boolean;
@@ -97,7 +97,7 @@ export async function fetchNotificationPreferences(
         'refund_sms',
       ]),
       security: boolGroup(p.security, ['email', 'sms']),
-      marketing: boolGroup(p.marketing, ['email', 'sms', 'whatsapp']),
+      marketing: boolGroup(p.marketing, ['email', 'sms', 'whatsapp', 'push']),
       reminders: boolGroup(p.reminders, [
         'abandoned_cart_email',
         'abandoned_cart_whatsapp',
@@ -128,7 +128,7 @@ export async function updateNotificationPreferences(
       'refund_sms',
     ]),
     security: boolGroup(saved.security, ['email', 'sms']),
-    marketing: boolGroup(saved.marketing, ['email', 'sms', 'whatsapp']),
+    marketing: boolGroup(saved.marketing, ['email', 'sms', 'whatsapp', 'push']),
     reminders: boolGroup(saved.reminders, [
       'abandoned_cart_email',
       'abandoned_cart_whatsapp',

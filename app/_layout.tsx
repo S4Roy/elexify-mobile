@@ -1,3 +1,4 @@
+import { PushProvider } from '../src/features/notifications/PushProvider';
 import React, { useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -36,6 +37,7 @@ export default function RootLayout() {
         <AppProviders>
           <StatusBar style="dark" />
           <Stack screenOptions={{ headerShown: false }} />
+          <PushProvider />
         </AppProviders>
       )}
       {showSplash && (

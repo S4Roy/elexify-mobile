@@ -8,7 +8,7 @@ import type { NotificationPreferences } from '../../api/account';
 import { useNotificationPreferences, useUpdateNotificationPreferences } from './hooks';
 
 type Group = keyof NotificationPreferences;
-type Row = { group: Group; key: string; label: string; channel: 'email' | 'sms' | 'whatsapp' };
+type Row = { group: Group; key: string; label: string; channel: 'email' | 'sms' | 'whatsapp' | 'push' };
 
 const SECTIONS: { title: string; rows: Row[] }[] = [
   {
@@ -33,6 +33,7 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
   {
     title: 'Offers & Marketing',
     rows: [
+      { group: 'marketing', key: 'push', label: 'Offers & discounts — Push', channel: 'push' },
       { group: 'marketing', key: 'email', label: 'Offers & discounts — Email', channel: 'email' },
       { group: 'marketing', key: 'sms', label: 'Offers & discounts — SMS', channel: 'sms' },
       { group: 'marketing', key: 'whatsapp', label: 'Offers & discounts — WhatsApp', channel: 'whatsapp' },
@@ -62,7 +63,7 @@ export default function PreferencesScreen() {
 
   const lockedPaths = new Set(query.data?.lockedPaths ?? []);
   const isChannelUnverified = (channel: Row['channel']) =>
-    channel === 'email' ? !query.data?.emailVerified : !query.data?.mobileVerified;
+    channel === 'push' ? false : channel === 'email' ? !query.data?.emailVerified : !query.data?.mobileVerified;
 
   const toggle = (group: Group, key: string, value: boolean) => {
     setSaved(false);

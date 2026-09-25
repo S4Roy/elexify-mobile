@@ -152,3 +152,8 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Environment-specific Firebase client config is supplied at build time.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}

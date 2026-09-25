@@ -1,3 +1,4 @@
+import { cleanupPushSession } from '../platform/pushLifecycle';
 import { create } from 'zustand';
 import { sessionStorage } from '../platform/session';
 
@@ -38,11 +39,13 @@ export const useSession = create<Session>(set => ({
       if (!token.trim()) {
         throw new Error('A valid session token is required.');
       }
+      if (useSession.getState().token) await cleanupPushSession().catch(() => undefined);
       await sessionStorage.writeToken(token);
       set({ token, status: 'authenticated' });
     }),
   signOut: () =>
     serialize(async () => {
+      await cleanupPushSession().catch(() => undefined);
       // Stop authenticated traffic even if secure storage subsequently fails.
       set({ token: null, guestId: null, status: 'loading' });
       try {

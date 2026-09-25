@@ -392,6 +392,7 @@ export default function AccountScreen() {
             <OrdersCard />
 
             <Group title="Shopping">
+              <Row icon="notifications-outline" label="Notifications" href={"/notifications" as Href} />
               <Row
                 icon="heart-outline"
                 label="Wishlist"
