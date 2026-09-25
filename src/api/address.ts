@@ -136,12 +136,15 @@ function addressPayload(input: AddressInput) {
   };
 }
 
-export async function saveAddress(input: AddressInput): Promise<void> {
+/** Creates or updates an address and returns its id — for a new address the
+ * backend returns the saved document (or the identical one already on file). */
+export async function saveAddress(input: AddressInput): Promise<string | null> {
   if (input.id) {
     await api.put('user/address/edit', { _id: input.id, ...addressPayload(input) });
-  } else {
-    await api.post('user/address/add', addressPayload(input));
+    return input.id;
   }
+  const res = await api.post('user/address/add', addressPayload(input));
+  return string(record(res.data?.data)._id) || null;
 }
 
 export async function setDefaultAddress(id: string): Promise<void> {

@@ -85,3 +85,18 @@ test('pincode lookup keeps a source city suggestion when no city ID was mapped',
     suggestedCityName: 'South 24 Parganas',
   }));
 });
+
+test('saveAddress returns the id so checkout can select the saved address', async () => {
+  const input = {
+    firstName: 'Riya', lastName: 'Sen', phone: '9876543210', postcode: '700091',
+    addressLine1: 'Flat 4B, Green Tower', city: 1, state: 2,
+  };
+  (api.post as jest.Mock).mockResolvedValue({ data: { data: { _id: 'new-address' } } });
+  await expect(saveAddress(input)).resolves.toBe('new-address');
+
+  (api.put as jest.Mock).mockResolvedValue({ data: {} });
+  await expect(saveAddress({ ...input, id: 'existing' })).resolves.toBe('existing');
+
+  (api.post as jest.Mock).mockResolvedValue({ data: {} });
+  await expect(saveAddress(input)).resolves.toBeNull();
+});

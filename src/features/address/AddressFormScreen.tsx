@@ -27,6 +27,7 @@ import { fetchCities, fetchStates, lookupPincode, MasterRef, reverseGeocode, Rev
 import { useAccount } from '../auth/hooks';
 import { QueryState } from '../catalog/QueryState';
 import { useAddresses, useSaveAddress } from './hooks';
+import { useCheckoutAddress } from '../../stores/checkoutAddress';
 
 type FormValues = {
   firstName: string;
@@ -91,9 +92,44 @@ function Field({
   );
 }
 
+/** Account-owned contact detail (mobile/email): shown read-only, but still
+ * validated so an address is never saved without a valid contact number. */
+function AccountField({
+  control, name, icon, label, emptyText, rules,
+}: {
+  control: Control<FormValues>;
+  name: 'phone' | 'email';
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  emptyText: string;
+  rules?: RegisterOptions<FormValues, TextFieldName>;
+}) {
+  const { field, fieldState } = useController({ control, name, rules });
+  const value = String(field.value ?? '');
+  return (
+    <View style={styles.accountRow} accessible accessibilityLabel={`${label}: ${value || emptyText}`}>
+      <View style={styles.accountIcon}>
+        <Ionicons name={icon} size={17} color={theme.colors.primary} />
+      </View>
+      <View style={styles.flex}>
+        <AppText style={styles.accountLabel}>{label}</AppText>
+        <AppText style={value ? styles.accountValue : styles.accountEmpty}>
+          {value ? (name === 'phone' ? `+91 ${value}` : value) : emptyText}
+        </AppText>
+        {!!fieldState.error?.message && (
+          <AppText accessibilityRole="alert" style={styles.fieldError}>{fieldState.error.message}</AppText>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function AddressFormScreen() {
-  const route = useLocalSearchParams<{ id?: string }>();
+  const route = useLocalSearchParams<{ id?: string; from?: string }>();
   const id = first(route.id) || undefined;
+  // Opened from checkout: the saved address becomes the delivery address there.
+  const fromCheckout = first(route.from) === 'checkout';
+  const selectForCheckout = useCheckoutAddress(s => s.select);
   const { width } = useWindowDimensions();
   const addresses = useAddresses();
   const account = useAccount();
@@ -322,7 +358,12 @@ export default function AddressFormScreen() {
       ...(detectedLocation.current?.postcode === values.postcode
         ? { latitude: detectedLocation.current.latitude, longitude: detectedLocation.current.longitude }
         : {}),
-    }, { onSuccess: () => router.back() });
+    }, {
+      onSuccess: savedId => {
+        if (fromCheckout && (savedId ?? id)) selectForCheckout((savedId ?? id)!);
+        router.back();
+      },
+    });
   };
   const pickerQuery = picker === 'state' ? states : cities;
   const pickerItems = (pickerQuery.data ?? []).filter(item =>
@@ -341,118 +382,181 @@ export default function AddressFormScreen() {
     );
   }
 
+  const saveLabel = save.isPending
+    ? 'Saving…'
+    : fromCheckout
+    ? 'Save & deliver here'
+    : id ? 'Save changes' : 'Save address';
+
   return (
-    <View style={shop.page}>
-      <ShopHeader title={id ? 'Edit address' : 'Add address'} back />
+    <View style={[shop.page, styles.page]}>
+      <ShopHeader title={id ? 'Edit address' : 'Add new address'} back />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <AppText style={styles.sectionTitle}>Contact details</AppText>
-          <View style={width >= 380 ? styles.nameRow : styles.stack}>
-            <View style={styles.flex}>
-              <Field control={control} name="firstName" label="First name" placeholder="Enter first name" required maxLength={100}
-                autoCapitalize="words" rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
-            </View>
-            <View style={styles.flex}>
-              <Field control={control} name="lastName" label="Last name" placeholder="Enter last name" required maxLength={100}
-                autoCapitalize="words" rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
-            </View>
-          </View>
-          <Field control={control} name="phone" editable={false} accessibilityState={{ disabled: true }} label="Mobile number" placeholder="10-digit mobile number" required prefix="+91"
-            keyboardType="number-pad" textContentType="telephoneNumber" maxLength={10} transform={value => value.replace(/\D/g, '')}
-            rules={{ validate: value => mobilePattern.test(value) || 'Add a valid mobile number in your account settings.' }} />
-          <AppText style={styles.helper}>Automatically filled from your account. Update your mobile number in your account settings.</AppText>
-          <Field control={control} name="email" editable={false} accessibilityState={{ disabled: true }} label="Email (optional)" placeholder="No account email" keyboardType="email-address"
-            autoCapitalize="none" autoCorrect={false} textContentType="emailAddress" maxLength={254}
-            rules={{ validate: value => !value.trim() || emailPattern.test(value.trim()) || 'Update your email in your account settings.' }} />
-
-          <AppText style={styles.helper}>Automatically filled from your account. Update your email in your account settings.</AppText>
-          <View style={styles.sectionBreak} />
-          <AppText style={styles.sectionTitle}>Delivery address</AppText>
-          <AppText style={styles.label}>Address type <AppText style={styles.required}>*</AppText></AppText>
-          <View style={styles.typeRow}>
-            {(['home', 'office', 'other'] as const).map(type => (
-              <Pressable key={type} accessibilityRole="radio" accessibilityState={{ checked: addressType === type }}
-                onPress={() => setValue('addressType', type, { shouldDirty: true })}
-                style={[styles.typeOption, addressType === type && styles.typeSelected]}>
-                <Ionicons name={type === 'home' ? 'home-outline' : type === 'office' ? 'briefcase-outline' : 'location-outline'}
-                  size={17} color={addressType === type ? theme.colors.primary : theme.colors.secondary} />
-                <AppText style={[styles.typeText, addressType === type && styles.typeTextSelected]}>{type[0].toUpperCase() + type.slice(1)}</AppText>
-              </Pressable>
-            ))}
-          </View>
-          <Field control={control} name="postcode" label="Pincode" placeholder="6-digit pincode" required keyboardType="number-pad"
-            textContentType="postalCode" maxLength={6} transform={value => value.replace(/\D/g, '')}
-            rules={{ validate: value => /^\d{6}$/.test(value) || 'Enter a 6-digit pincode.' }} />
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: locating }} disabled={locating}
-            onPress={useCurrentLocation} style={styles.detectButton}>
-            {locating ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Ionicons name="locate-outline" size={19} color={theme.colors.primary} />}
-            <AppText style={styles.detectText}>{locating ? 'Detecting location…' : 'Use current location'}</AppText>
-          </Pressable>
-          {!!locationMessage && <AppText accessibilityRole="alert" style={styles.helper}>{locationMessage}</AppText>}
-          {lookupStatus === 'loading' && <View style={styles.statusRow}><ActivityIndicator size="small" color={theme.colors.primary} /><AppText style={styles.helper}>Checking delivery area…</AppText></View>}
-          {lookupStatus === 'resolved' && locality && (
-            <View style={styles.locality}>
-              <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
-              <View style={styles.flex}>
-                <AppText style={styles.localityTitle}>Delivery available</AppText>
-                <AppText style={styles.helper}>{locality.cityName}, {locality.stateName}</AppText>
-              </View>
+            onPress={useCurrentLocation}
+            style={({ pressed }) => [styles.locateCard, pressed && styles.pressed]}>
+            <View style={styles.locateIcon}>
+              {locating
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <Ionicons name="navigate" size={18} color="#FFFFFF" />}
             </View>
-          )}
-          {lookupStatus === 'error' && (
-            <Pressable accessibilityRole="button" onPress={() => setLookupAttempt(value => value + 1)} style={styles.retryButton}>
-              <AppText style={styles.retryText}>Retry pincode lookup</AppText>
-            </Pressable>
-          )}
-          {manualLocation && (
-            <View style={styles.manualLocation}>
-              <View style={styles.manualNotice}>
-                <Ionicons name="information-circle-outline" size={19} color={theme.colors.primary} />
-                <AppText style={[styles.helper, styles.manualNoticeText]}>
-                {lookupStatus === 'error'
-                  ? 'Pincode lookup is unavailable. Confirm the state and city below.'
-                  : 'We could not confirm the city for this pincode. Check the details below.'}
-                </AppText>
-              </View>
-              <AppText style={styles.label}>State <AppText style={styles.required}>*</AppText></AppText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Select state" onPress={() => { setPickerSearch(''); setPicker('state'); }} style={[styles.locationSelect, !!locationError && !manualState && styles.invalid]}>
-                  <AppText numberOfLines={1} style={manualState ? styles.locationValue : styles.locationPlaceholder}>{manualState?.name || 'Select state'}</AppText>
-                  <Ionicons name="chevron-down" size={18} color={theme.colors.secondary} />
-              </Pressable>
-              <AppText style={styles.label}>City <AppText style={styles.required}>*</AppText></AppText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Select city" accessibilityState={{ disabled: !manualState }} disabled={!manualState}
-                  onPress={() => { setPickerSearch(''); setPicker('city'); }} style={[styles.locationSelect, !manualState && styles.selectDisabled, !!locationError && !!manualState && !manualCity && styles.invalid]}>
-                  <AppText numberOfLines={1} style={manualCity ? styles.locationValue : styles.locationPlaceholder}>{manualCity?.name || 'Select city'}</AppText>
-                  <Ionicons name="chevron-down" size={18} color={theme.colors.secondary} />
-              </Pressable>
-              {!!locationError && <AppText accessibilityRole="alert" style={styles.fieldError}>{locationError}</AppText>}
-            </View>
-          )}
-          <Field control={control} name="addressLine1" label="Street address" placeholder="House no., building, street" required
-            maxLength={200} autoCapitalize="sentences" multiline
-            rules={{ validate: value => value.trim().length >= 5 || 'Enter at least 5 characters.' }} />
-          <Field control={control} name="addressLine2" label="Area or colony (optional)" placeholder="Area, locality or colony"
-            maxLength={200} autoCapitalize="sentences" />
-          <Field control={control} name="landMark" label="Landmark (optional)" placeholder="Nearby landmark"
-            maxLength={100} autoCapitalize="sentences" />
-          <View style={styles.defaultRow}>
             <View style={styles.flex}>
-              <AppText style={styles.defaultTitle}>Set as default address</AppText>
-              <AppText style={styles.helper}>Use this address first at checkout.</AppText>
+              <AppText style={styles.locateTitle}>{locating ? 'Detecting your location…' : 'Use my current location'}</AppText>
+              <AppText style={styles.locateText}>Fills in your pincode and street automatically</AppText>
             </View>
-            <Switch accessibilityLabel="Set as default address" value={isDefault} onValueChange={value => setValue('isDefault', value, { shouldDirty: true })}
-              trackColor={{ false: '#D1D5DB', true: '#9ED9D1' }} thumbColor={isDefault ? theme.colors.primary : '#FFFFFF'} />
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+          </Pressable>
+          {!!locationMessage && (
+            <AppText accessibilityRole="alert" style={[styles.helper, styles.locateMessage]}>{locationMessage}</AppText>
+          )}
+
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Ionicons name="location-outline" size={18} color={theme.colors.primary} />
+              <AppText style={styles.cardTitle}>Delivery address</AppText>
+            </View>
+            <Field control={control} name="postcode" label="Pincode" placeholder="6-digit pincode" required keyboardType="number-pad"
+              textContentType="postalCode" autoComplete="postal-code" maxLength={6} transform={value => value.replace(/\D/g, '')}
+              rules={{ validate: value => /^\d{6}$/.test(value) || 'Enter a 6-digit pincode.' }} />
+            {lookupStatus === 'loading' && (
+              <View style={styles.statusRow}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <AppText style={styles.helper}>Checking delivery area…</AppText>
+              </View>
+            )}
+            {lookupStatus === 'resolved' && locality && (
+              <View style={styles.locality}>
+                <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+                <View style={styles.flex}>
+                  <AppText style={styles.localityTitle}>We deliver here</AppText>
+                  <AppText style={styles.helper}>{locality.cityName}, {locality.stateName}</AppText>
+                </View>
+              </View>
+            )}
+            {lookupStatus === 'error' && (
+              <Pressable accessibilityRole="button" onPress={() => setLookupAttempt(value => value + 1)} style={styles.retryButton}>
+                <Ionicons name="refresh" size={15} color={theme.colors.primary} />
+                <AppText style={styles.retryText}>Retry pincode check</AppText>
+              </Pressable>
+            )}
+            {manualLocation && (
+              <View style={styles.manualLocation}>
+                <View style={styles.manualNotice}>
+                  <Ionicons name="information-circle-outline" size={19} color={theme.colors.primary} />
+                  <AppText style={[styles.helper, styles.manualNoticeText]}>
+                    {lookupStatus === 'error'
+                      ? 'Pincode lookup is unavailable. Confirm the state and city below.'
+                      : 'We could not confirm the city for this pincode. Check the details below.'}
+                  </AppText>
+                </View>
+                <View style={width >= 380 ? styles.nameRow : styles.stack}>
+                  <View style={[styles.flex, styles.field]}>
+                    <AppText style={styles.label}>State <AppText style={styles.required}>*</AppText></AppText>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Select state" onPress={() => { setPickerSearch(''); setPicker('state'); }}
+                      style={[styles.locationSelect, !!locationError && !manualState && styles.invalid]}>
+                      <AppText numberOfLines={1} style={manualState ? styles.locationValue : styles.locationPlaceholder}>{manualState?.name || 'Select state'}</AppText>
+                      <Ionicons name="chevron-down" size={18} color={theme.colors.secondary} />
+                    </Pressable>
+                  </View>
+                  <View style={[styles.flex, styles.field]}>
+                    <AppText style={styles.label}>City <AppText style={styles.required}>*</AppText></AppText>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Select city" accessibilityState={{ disabled: !manualState }} disabled={!manualState}
+                      onPress={() => { setPickerSearch(''); setPicker('city'); }}
+                      style={[styles.locationSelect, !manualState && styles.selectDisabled, !!locationError && !!manualState && !manualCity && styles.invalid]}>
+                      <AppText numberOfLines={1} style={manualCity ? styles.locationValue : styles.locationPlaceholder}>{manualCity?.name || 'Select city'}</AppText>
+                      <Ionicons name="chevron-down" size={18} color={theme.colors.secondary} />
+                    </Pressable>
+                  </View>
+                </View>
+                {!!locationError && <AppText accessibilityRole="alert" style={styles.fieldError}>{locationError}</AppText>}
+              </View>
+            )}
+            <Field control={control} name="addressLine1" label="House no., building, street" placeholder="e.g. Flat 4B, Green Tower, MG Road" required
+              maxLength={200} autoCapitalize="sentences" multiline textContentType="streetAddressLine1"
+              rules={{ validate: value => value.trim().length >= 5 || 'Enter at least 5 characters.' }} />
+            <Field control={control} name="addressLine2" label="Area, locality or colony" placeholder="e.g. Salt Lake Sector V"
+              maxLength={200} autoCapitalize="sentences" textContentType="streetAddressLine2" />
+            <Field control={control} name="landMark" label="Landmark (optional)" placeholder="e.g. Near City Centre mall"
+              maxLength={100} autoCapitalize="sentences" />
           </View>
-          {!!save.error && <AppText accessibilityRole="alert" style={styles.fieldError}>{save.error.message}</AppText>}
-          {Object.keys(errors).length > 0 && <AppText style={styles.helper}>Review the highlighted fields before saving.</AppText>}
+
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Ionicons name="person-outline" size={18} color={theme.colors.primary} />
+              <AppText style={styles.cardTitle}>Contact details</AppText>
+            </View>
+            <View style={width >= 380 ? styles.nameRow : styles.stack}>
+              <View style={styles.flex}>
+                <Field control={control} name="firstName" label="First name" placeholder="First name" required maxLength={100}
+                  autoCapitalize="words" textContentType="givenName" autoComplete="name-given"
+                  rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
+              </View>
+              <View style={styles.flex}>
+                <Field control={control} name="lastName" label="Last name" placeholder="Last name" required maxLength={100}
+                  autoCapitalize="words" textContentType="familyName" autoComplete="name-family"
+                  rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
+              </View>
+            </View>
+            <View style={styles.accountBox}>
+              <AccountField control={control} name="phone" icon="call-outline" label="Mobile number" emptyText="No mobile number on your account"
+                rules={{ validate: value => mobilePattern.test(value) || 'Add a valid mobile number in your account settings.' }} />
+              <View style={styles.accountDivider} />
+              <AccountField control={control} name="email" icon="mail-outline" label="Email (optional)" emptyText="No email on your account"
+                rules={{ validate: value => !value.trim() || emailPattern.test(value.trim()) || 'Update your email in your account settings.' }} />
+            </View>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/account/security')} hitSlop={8} style={styles.accountLink}>
+              <AppText style={styles.helper}>From your account · </AppText>
+              <AppText style={styles.accountLinkText}>Change</AppText>
+            </Pressable>
+          </View>
+
+          <View style={styles.card}>
+            <AppText style={styles.cardTitle}>Save address as</AppText>
+            <View style={styles.typeRow} accessibilityRole="radiogroup">
+              {(['home', 'office', 'other'] as const).map(type => {
+                const selected = addressType === type;
+                return (
+                  <Pressable key={type} accessibilityRole="radio" accessibilityState={{ checked: selected }}
+                    onPress={() => setValue('addressType', type, { shouldDirty: true })}
+                    style={[styles.typeOption, selected && styles.typeSelected]}>
+                    <Ionicons name={type === 'home' ? (selected ? 'home' : 'home-outline') : type === 'office' ? (selected ? 'briefcase' : 'briefcase-outline') : (selected ? 'location' : 'location-outline')}
+                      size={17} color={selected ? theme.colors.primary : theme.colors.secondary} />
+                    <AppText style={[styles.typeText, selected && styles.typeTextSelected]}>{type[0].toUpperCase() + type.slice(1)}</AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: isDefault }}
+              onPress={() => setValue('isDefault', !isDefault, { shouldDirty: true })} style={styles.defaultRow}>
+              <View style={styles.flex}>
+                <AppText style={styles.defaultTitle}>Make this my default address</AppText>
+                <AppText style={styles.helper}>Selected first whenever you check out.</AppText>
+              </View>
+              <Switch accessibilityLabel="Make this my default address" value={isDefault} onValueChange={value => setValue('isDefault', value, { shouldDirty: true })}
+                trackColor={{ false: '#D1D5DB', true: '#9ED9D1' }} thumbColor={isDefault ? theme.colors.primary : '#FFFFFF'} />
+            </Pressable>
+          </View>
+
+          {(!!save.error || Object.keys(errors).length > 0) && (
+            <View accessibilityRole="alert" style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={17} color={theme.colors.danger} />
+              <AppText style={styles.errorText}>
+                {save.error?.message ?? 'Please fix the highlighted fields before saving.'}
+              </AppText>
+            </View>
+          )}
         </ScrollView>
         <SafeAreaView edges={['bottom']} style={styles.footer}>
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: save.isPending }} disabled={save.isPending}
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: save.isPending, busy: save.isPending }} disabled={save.isPending}
             onPress={handleSubmit(submit, invalidFields => {
               const firstInvalid = Object.keys(invalidFields)[0] as TextFieldName | undefined;
-              if (firstInvalid) setFocus(firstInvalid);
-            })} style={[styles.saveButton, save.isPending && styles.saveDisabled]}>
-            <AppText style={styles.saveText}>{save.isPending ? 'Saving…' : id ? 'Update address' : 'Save address'}</AppText>
+              if (firstInvalid && firstInvalid !== 'phone' && firstInvalid !== 'email') setFocus(firstInvalid);
+            })} style={({ pressed }) => [styles.saveButton, save.isPending && styles.saveDisabled, pressed && styles.pressed]}>
+            {save.isPending
+              ? <ActivityIndicator size="small" color="#FFFFFF" />
+              : <Ionicons name={fromCheckout ? 'checkmark-circle' : 'save-outline'} size={18} color="#FFFFFF" />}
+            <AppText style={styles.saveText}>{saveLabel}</AppText>
           </Pressable>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -515,16 +619,41 @@ export default function AddressFormScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  page: { backgroundColor: '#F4F6F8' },
+  pressed: { opacity: 0.85 },
   stateBody: { padding: 20 },
-  body: { padding: 20, gap: 14, paddingBottom: 28 },
-  sectionTitle: { fontFamily: theme.fonts.semibold, fontSize: 18, color: theme.colors.text },
-  sectionBreak: { height: 1, backgroundColor: theme.colors.border, marginVertical: 4 },
+  body: { padding: 16, gap: 14, paddingBottom: 28 },
+  card: {
+    gap: 14, padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle: { fontFamily: theme.fonts.semibold, fontSize: 16, color: theme.colors.text },
+  locateCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#9FD3CB', backgroundColor: '#F3FBF9',
+  },
+  locateIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary },
+  locateTitle: { fontFamily: theme.fonts.semibold, fontSize: 15, color: theme.colors.primary },
+  locateText: { fontSize: 12, color: '#4B5563', marginTop: 1 },
+  locateMessage: { marginTop: -6, paddingHorizontal: 4 },
+  accountBox: { borderRadius: 12, backgroundColor: '#F9FAFB', paddingHorizontal: 12 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  accountIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5F3' },
+  accountLabel: { fontSize: 11, color: theme.colors.secondary },
+  accountValue: { fontFamily: theme.fonts.medium, fontSize: 14, color: theme.colors.text },
+  accountEmpty: { fontSize: 13, color: theme.colors.secondary, fontStyle: 'italic' },
+  accountDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#E5E7EB', marginLeft: 44 },
+  accountLink: { flexDirection: 'row', alignItems: 'center', marginTop: -6 },
+  accountLinkText: { color: theme.colors.primary, fontFamily: theme.fonts.semibold, fontSize: 12 },
+  errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: 12, backgroundColor: '#FEF2F2' },
+  errorText: { flex: 1, color: theme.colors.danger, fontSize: 13, lineHeight: 18 },
   nameRow: { flexDirection: 'row', gap: 12 },
   stack: { gap: 14 },
   field: { gap: 6 },
   label: { fontFamily: theme.fonts.medium, fontSize: 14, color: theme.colors.text },
   required: { color: theme.colors.danger },
-  inputShell: { minHeight: 52, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  inputShell: { minHeight: 52, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 12, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
   inputDisabled: { backgroundColor: '#F3F4F6', opacity: 0.7 },
   invalid: { borderColor: theme.colors.danger, borderWidth: 1.5 },
   multilineShell: { minHeight: 80, alignItems: 'flex-start' },
@@ -533,22 +662,20 @@ const styles = StyleSheet.create({
   prefix: { fontFamily: theme.fonts.medium, fontSize: 15, color: theme.colors.text, marginRight: 10 },
   fieldError: { color: theme.colors.danger, fontSize: 12, lineHeight: 18 },
   typeRow: { flexDirection: 'row', gap: 8 },
-  typeOption: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
-  typeSelected: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
+  typeOption: { flex: 1, minHeight: 46, borderRadius: 999, borderWidth: 1.5, borderColor: theme.colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  typeSelected: { backgroundColor: '#F3FBF9', borderColor: theme.colors.primary },
   typeText: { color: theme.colors.secondary, fontFamily: theme.fonts.medium, fontSize: 13 },
   typeTextSelected: { color: theme.colors.primary },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   helper: { color: theme.colors.secondary, fontSize: 12, lineHeight: 18 },
-  locality: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 10, backgroundColor: '#E9F8F5' },
+  locality: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: '#E9F8F5', marginTop: -4 },
   localityTitle: { color: theme.colors.primary, fontFamily: theme.fonts.medium, fontSize: 13 },
-  retryButton: { alignSelf: 'flex-start', paddingVertical: 4 },
+  retryButton: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   retryText: { color: theme.colors.primary, fontFamily: theme.fonts.medium, fontSize: 13 },
-  detectButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
-  detectText: { color: theme.colors.primary, fontFamily: theme.fonts.medium, fontSize: 14 },
   manualLocation: { gap: 7 },
   manualNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: 10, backgroundColor: '#F1F8F7', marginBottom: 5 },
   manualNoticeText: { flex: 1 },
-  locationSelect: { minHeight: 52, paddingHorizontal: 14, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFFFF' },
+  locationSelect: { minHeight: 52, paddingHorizontal: 14, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFFFF' },
   locationValue: { flex: 1, color: theme.colors.text, fontSize: 15 },
   locationPlaceholder: { flex: 1, color: theme.colors.secondary, fontSize: 15 },
   selectDisabled: { opacity: 0.5 },
@@ -567,10 +694,16 @@ const styles = StyleSheet.create({
   pickerItemSelected: { backgroundColor: theme.colors.primaryLight },
   pickerItemText: { flex: 1, fontFamily: theme.fonts.regular, color: theme.colors.text, fontSize: 15, lineHeight: 23 },
   emptyPicker: { padding: 24, color: theme.colors.secondary, fontSize: 14, textAlign: 'center' },
-  defaultRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10 },
+  defaultRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E7EB' },
   defaultTitle: { fontFamily: theme.fonts.medium, fontSize: 14 },
-  footer: { backgroundColor: theme.colors.surface, borderTopWidth: 1, borderTopColor: theme.colors.border, paddingHorizontal: 20, paddingTop: 12 },
-  saveButton: { minHeight: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary },
+  footer: {
+    backgroundColor: '#FFFFFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E7EB', paddingHorizontal: 16, paddingTop: 12,
+    shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 12,
+  },
+  saveButton: {
+    minHeight: 52, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
   saveDisabled: { opacity: 0.6 },
   saveText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 16 },
 });

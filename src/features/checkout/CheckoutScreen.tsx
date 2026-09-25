@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RazorpayCheckout, { RazorpayError } from 'react-native-razorpay';
 import { AppText, Button, Feedback } from '../../components/ui';
 import {
@@ -34,6 +35,7 @@ import {
   useVerifyPayment,
 } from './hooks';
 import { isRazorpayCancelled } from './friendlyReason';
+import { useCheckoutAddress } from '../../stores/checkoutAddress';
 
 const formatAddress = (address: Address) =>
   [
@@ -156,16 +158,77 @@ function AddressCard({
   );
 }
 
-function StepHeading({ step, title }: { step: number; title: string }) {
+function StepHeading({
+  step,
+  title,
+  done = false,
+  aside,
+}: {
+  step: number;
+  title: string;
+  /** Step completed — the number turns into a tick. */
+  done?: boolean;
+  aside?: string;
+}) {
   return (
     <View style={styles.stepHeading}>
-      <View style={styles.stepBadge}>
-        <AppText style={styles.stepBadgeText}>{step}</AppText>
+      <View style={[styles.stepBadge, done && styles.stepBadgeDone]}>
+        {done ? (
+          <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+        ) : (
+          <AppText style={styles.stepBadgeText}>{step}</AppText>
+        )}
       </View>
-      <AppText style={shop.heading}>{title}</AppText>
+      <AppText style={styles.stepTitle}>{title}</AppText>
+      {!!aside && <AppText style={styles.stepAside}>{aside}</AppText>}
     </View>
   );
 }
+
+/** Dashed "add" tile — a secondary action that never competes visually with
+ * the solid Pay / Place order button. */
+function AddAddressTile({
+  prominent,
+  onPress,
+}: {
+  /** No saved address yet: larger, explanatory version. */
+  prominent: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Add a delivery address"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.addTile,
+        prominent && styles.addTileProminent,
+        pressed && styles.addTilePressed,
+      ]}
+    >
+      <View style={[styles.addTileIcon, prominent && styles.addTileIconLarge]}>
+        <Ionicons
+          name={prominent ? 'location-outline' : 'add'}
+          size={prominent ? 22 : 18}
+          color={theme.colors.primary}
+        />
+      </View>
+      <View style={styles.flex}>
+        <AppText style={styles.addTileTitle}>
+          {prominent ? 'Add a delivery address' : 'Add a new address'}
+        </AppText>
+        {prominent && (
+          <AppText style={styles.addTileText}>
+            We'll use it to check delivery time and shipping charges.
+          </AppText>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
+    </Pressable>
+  );
+}
+
+const PREVIEW_ITEMS = 3;
 
 function PaymentOption({
   icon,
@@ -230,15 +293,30 @@ export default function CheckoutScreen() {
   const addresses = useAddresses();
   const [addressId, setAddressId] = useState<string | undefined>(undefined);
   const selectedAddress = addresses.data?.items.find(a => a.id === addressId);
-  const defaultApplied = React.useRef(false);
-  if (!defaultApplied.current && addresses.data && !addressId) {
-    defaultApplied.current = true;
-    const preferred =
-      addresses.data.items.find(a => a.isDefault) ?? addresses.data.items[0];
-    if (preferred) {
-      setAddressId(preferred.id);
+  const pendingAddressId = useCheckoutAddress(s => s.pendingId);
+  const consumePendingAddress = useCheckoutAddress(s => s.consume);
+  useEffect(() => {
+    const items = addresses.data?.items;
+    if (!items?.length) {
+      return;
     }
-  }
+    // Just added/edited from this checkout: select it once it's in the list.
+    if (pendingAddressId && items.some(a => a.id === pendingAddressId)) {
+      setAddressId(pendingAddressId);
+      consumePendingAddress();
+      return;
+    }
+    // Nothing (valid) selected — e.g. first visit, the first address was just
+    // added, or the selected one was deleted: fall back to the default.
+    if (!addressId || !items.some(a => a.id === addressId)) {
+      setAddressId((items.find(a => a.isDefault) ?? items[0]).id);
+    }
+  }, [addresses.data, addressId, pendingAddressId, consumePendingAddress]);
+  const openAddressForm = (id?: string) =>
+    router.push({
+      pathname: '/addresses/form',
+      params: { ...(id ? { id } : {}), from: 'checkout' },
+    });
 
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'razorpay'>(
     'razorpay',
@@ -487,21 +565,45 @@ export default function CheckoutScreen() {
     data.items.length === 0 ||
     (mobileVerified && !!selectedAddress && codSelectedButIneligible);
 
+  // "setup" = a step is still missing (verify mobile / add address): shown as
+  // an outlined button so it's never mistaken for the pay action. Only
+  // "commit" — actually placing the order — gets the solid primary button.
+  const ctaKind: 'setup' | 'commit' =
+    !mobileVerified || !selectedAddress ? 'setup' : 'commit';
   const ctaLabel = !mobileVerified
-    ? 'Verify mobile number to continue'
+    ? 'Verify mobile number'
     : !selectedAddress
-    ? 'Add delivery address to continue'
-    : placing || recalculating
+    ? 'Add delivery address'
+    : placing
     ? 'Placing order…'
+    : recalculating
+    ? 'Updating total…'
     : paymentMethod === 'razorpay'
-    ? `Pay ${money(total)}`
+    ? 'Pay now'
     : isPartialCod
-    ? `Pay ${money(advanceAmount)} advance`
+    ? 'Pay advance'
     : 'Place order';
+  const ctaIcon: React.ComponentProps<typeof Ionicons>['name'] | null =
+    !mobileVerified
+      ? 'shield-checkmark-outline'
+      : !selectedAddress
+      ? 'location-outline'
+      : paymentMethod === 'razorpay' || isPartialCod
+      ? 'lock-closed'
+      : null;
+  const onCta = !mobileVerified
+    ? () => router.push('/account/security')
+    : !selectedAddress
+    ? () => openAddressForm()
+    : submit;
+  const payNow = isPartialCod ? advanceAmount : total;
+
+  const insets = useSafeAreaInsets();
+  const [showAllItems, setShowAllItems] = useState(false);
 
   if (addresses.isPending) {
     return (
-      <View style={shop.page}>
+      <View style={[shop.page, styles.page]}>
         <ShopHeader title="Checkout" back />
         <ScrollView contentContainerStyle={styles.skeletonScroll}>
           <CheckoutSkeleton />
@@ -510,46 +612,53 @@ export default function CheckoutScreen() {
     );
   }
 
+  const hasItems = !!data?.items.length;
+  const visibleItems =
+    data && !showAllItems ? data.items.slice(0, PREVIEW_ITEMS) : data?.items;
+  const noAddresses = !!addresses.data && addresses.data.items.length === 0;
+
   return (
-    <View style={shop.page}>
+    <View style={[shop.page, styles.page]}>
       <ShopHeader title="Checkout" back />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.hero}>
-            <AppText style={styles.eyebrow}>Secure Checkout</AppText>
-            <AppText style={styles.heroTitle}>Checkout</AppText>
-            <AppText style={styles.lead}>
-              Confirm your delivery address and payment method to place your
-              order.
+          <View style={styles.secureStrip}>
+            <Ionicons
+              name="lock-closed"
+              size={12}
+              color={theme.colors.primary}
+            />
+            <AppText style={styles.secureStripText}>
+              Secure checkout · Your details are encrypted
             </AppText>
           </View>
 
           {!mobileVerified && (
             <View style={styles.warningBanner}>
-              <Ionicons name="shield-outline" size={16} color="#A65C00" />
+              <Ionicons name="shield-outline" size={18} color="#A65C00" />
               <View style={styles.flex}>
-                <AppText style={styles.warningText}>
-                  Verify your mobile number before placing your order.
+                <AppText style={styles.warningTitle}>
+                  Verify your mobile number
                 </AppText>
-                <AppText
-                  accessibilityRole="button"
-                  onPress={() => router.push('/account/security')}
-                  style={[shop.link, styles.warningLink]}
-                >
-                  Verify now
+                <AppText style={styles.warningText}>
+                  We need a verified number to send order and delivery updates.
                 </AppText>
               </View>
             </View>
           )}
 
-          <View style={styles.section}>
-            <StepHeading step={1} title="Deliver to" />
+          <View style={styles.card}>
+            <StepHeading
+              step={1}
+              title="Delivery address"
+              done={!!selectedAddress}
+            />
             <QueryState
               pending={addresses.isPending}
               error={addresses.error}
@@ -557,73 +666,52 @@ export default function CheckoutScreen() {
                 addresses.refetch().catch(() => undefined);
               }}
             />
-            {addresses.data && addresses.data.items.length === 0 && (
+            {noAddresses ? (
+              <AddAddressTile
+                prominent
+                onPress={() => openAddressForm()}
+              />
+            ) : (
               <>
-                <Feedback
-                  title="No saved address"
-                  message="Add a delivery address to continue."
-                />
-                <Button
-                  label="Add address"
-                  onPress={() => router.push('/addresses/form')}
-                />
+                <View style={styles.addressList}>
+                  {addresses.data?.items.map(address => (
+                    <AddressCard
+                      key={address.id}
+                      address={address}
+                      selected={address.id === addressId}
+                      onSelect={() => setAddressId(address.id)}
+                      onEdit={() => openAddressForm(address.id)}
+                    />
+                  ))}
+                </View>
+                {!!addresses.data?.items.length && (
+                  <AddAddressTile
+                    prominent={false}
+                    onPress={() => openAddressForm()}
+                  />
+                )}
               </>
             )}
-            <View style={styles.addressList}>
-              {addresses.data?.items.map(address => (
-                <AddressCard
-                  key={address.id}
-                  address={address}
-                  selected={address.id === addressId}
-                  onSelect={() => setAddressId(address.id)}
-                  onEdit={() =>
-                    router.push({
-                      pathname: '/addresses/form',
-                      params: { id: address.id },
-                    })
-                  }
-                />
-              ))}
-            </View>
-            {!!addresses.data?.items.length && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push('/addresses/form')}
-                style={styles.addAddressButton}
-              >
+            {selectedAddress && (
+              <View style={styles.estimate}>
                 <Ionicons
-                  name="add-circle-outline"
+                  name="car-outline"
                   size={16}
                   color={theme.colors.primary}
                 />
-                <AppText style={shop.link}>Add a new address</AppText>
-              </Pressable>
+                <AppText style={styles.estimateText}>
+                  {cart.isFetching && !data
+                    ? 'Checking delivery estimate…'
+                    : data?.estimatedDelivery
+                    ? `Estimated delivery ${data.estimatedDelivery.display}`
+                    : 'Delivery estimate unavailable for this address'}
+                </AppText>
+              </View>
             )}
-            {selectedAddress &&
-              (cart.isFetching && !data ? (
-                <AppText style={shop.muted}>
-                  Checking delivery estimate…
-                </AppText>
-              ) : data?.estimatedDelivery ? (
-                <View style={styles.row}>
-                  <Ionicons
-                    name="car-outline"
-                    size={13}
-                    color={theme.colors.primary}
-                  />
-                  <AppText style={styles.deliveryEstimate}>
-                    Estimated delivery: {data.estimatedDelivery.display}
-                  </AppText>
-                </View>
-              ) : (
-                <AppText style={shop.muted}>
-                  Delivery estimate currently unavailable for this address
-                </AppText>
-              ))}
           </View>
 
           {data && data.items.length === 0 && (
-            <>
+            <View style={styles.card}>
               <Feedback
                 title="Your checkout is empty"
                 message="Add products to your cart before proceeding to checkout."
@@ -632,32 +720,22 @@ export default function CheckoutScreen() {
                 label="Browse products"
                 onPress={() => router.push('/')}
               />
-            </>
-          )}
-
-          {!!data?.items.length && (
-            <View style={styles.section}>
-              <View style={shop.between}>
-                <StepHeading step={2} title="Order items" />
-                <AppText style={shop.muted}>
-                  {itemCount} item{itemCount !== 1 ? 's' : ''}
-                </AppText>
-              </View>
-              {data.items.map(item => (
-                <OrderItemRow key={item.id} item={item} />
-              ))}
             </View>
           )}
 
-          {!!data?.items.length && (
+          {hasItems && data && (
             <>
-              <View style={styles.section}>
-                <StepHeading step={3} title="Payment method" />
+              <View style={styles.card}>
+                <StepHeading
+                  step={2}
+                  title="Payment method"
+                  done={!codSelectedButIneligible}
+                />
                 <View style={styles.paymentChoices}>
                   <PaymentOption
                     icon="card-outline"
-                    title="Online Payment"
-                    subtitle="UPI, Cards, Net Banking"
+                    title="Pay online"
+                    subtitle="UPI, cards, net banking & wallets"
                     selected={paymentMethod === 'razorpay'}
                     onPress={() => setPaymentMethod('razorpay')}
                   />
@@ -673,6 +751,8 @@ export default function CheckoutScreen() {
                         ? `Pay ${effectiveCod.advancePercent}% now, ${
                             100 - effectiveCod.advancePercent
                           }% on delivery`
+                        : effectiveCod.fee
+                        ? `Pay on delivery · ${money(effectiveCod.fee)} COD fee`
                         : 'Pay the full amount on delivery'
                     }
                     selected={paymentMethod === 'cod'}
@@ -682,239 +762,327 @@ export default function CheckoutScreen() {
                 </View>
               </View>
 
-              <View style={styles.section}>
-                <AppText style={shop.heading}>Order summary</AppText>
-                {data && (
-                  <>
-                    <View style={shop.between}>
-                      <AppText style={shop.muted}>
-                        MRP / Subtotal ({itemCount} items)
-                      </AppText>
-                      <AppText style={styles.summaryValue}>
-                        {money(data.mrpSubtotal)}
-                      </AppText>
-                    </View>
-                    {data.productDiscount > 0 && (
-                      <View style={shop.between}>
-                        <AppText style={styles.discountLabel}>
-                          Product discount
-                        </AppText>
-                        <AppText style={styles.discountLabel}>
-                          −{money(data.productDiscount)}
-                        </AppText>
-                      </View>
-                    )}
-                    {data.quantityDiscount > 0 && (
-                      <View style={shop.between}>
-                        <AppText style={styles.discountLabel}>
-                          Buy more save more
-                        </AppText>
-                        <AppText style={styles.discountLabel}>
-                          −{money(data.quantityDiscount)}
-                        </AppText>
-                      </View>
-                    )}
-                    {couponResult && (
-                      <View style={shop.between}>
-                        <View style={styles.row}>
-                          <AppText style={styles.discountLabel}>
-                            Coupon ({couponResult.code})
-                          </AppText>
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={removeCoupon}
-                          >
-                            <AppText style={styles.removeCoupon}>
-                              Remove
-                            </AppText>
-                          </Pressable>
-                        </View>
-                        <AppText style={styles.discountLabel}>
-                          −{money(couponResult.discount)}
-                        </AppText>
-                      </View>
-                    )}
-                    <View style={shop.between}>
-                      <AppText style={shop.muted}>Shipping charge</AppText>
-                      {cart.isFetching ? (
-                        <AppText style={shop.muted}>…</AppText>
-                      ) : data.shippingAmount === null ? (
-                        <AppText style={shop.muted}>Select an address</AppText>
-                      ) : data.shippingAmount === 0 ? (
-                        <AppText style={styles.discountLabel}>Free</AppText>
-                      ) : (
-                        <AppText style={styles.summaryValue}>
-                          {money(data.shippingAmount)}
-                        </AppText>
-                      )}
-                    </View>
-                    {codFee > 0 && (
-                      <View style={shop.between}>
-                        <AppText style={shop.muted}>
-                          Cash on delivery fee
-                        </AppText>
-                        <AppText style={styles.summaryValue}>
-                          {money(codFee)}
-                        </AppText>
-                      </View>
-                    )}
-                    <View style={styles.payableRow}>
-                      <AppText style={styles.payableLabel}>
-                        Amount payable
-                      </AppText>
-                      <AppText style={styles.payableLabel}>
-                        {recalculating ? 'Calculating…' : money(total)}
-                      </AppText>
-                    </View>
-                    {isPartialCod && !recalculating && (
-                      <View style={styles.advanceBox}>
-                        <View style={shop.between}>
-                          <AppText style={styles.advanceMuted}>
-                            Order total
-                          </AppText>
-                          <AppText style={styles.advanceValue}>
-                            {money(total)}
-                          </AppText>
-                        </View>
-                        <View style={shop.between}>
-                          <AppText style={styles.advanceHighlight}>
-                            Advance payment ({advancePercent}%)
-                          </AppText>
-                          <AppText style={styles.advanceHighlight}>
-                            {money(advanceAmount)}
-                          </AppText>
-                        </View>
-                        <View style={shop.between}>
-                          <AppText style={styles.advanceMuted}>
-                            COD balance ({100 - advancePercent}%)
-                          </AppText>
-                          <AppText style={styles.advanceValue}>
-                            {money(codBalance)}
-                          </AppText>
-                        </View>
-                        <AppText style={styles.advanceNote}>
-                          Pay {money(advanceAmount)} now to confirm your order.
-                          The remaining {money(codBalance)} is due in cash on
-                          delivery.
-                        </AppText>
-                      </View>
-                    )}
-                    {totalSavings > 0 && (
-                      <View style={styles.savingsBanner}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={14}
-                          color={theme.colors.primary}
-                        />
-                        <AppText style={styles.savingsText}>
-                          You saved {money(totalSavings)} on this order!
-                        </AppText>
-                      </View>
-                    )}
-                  </>
-                )}
-
-                <View style={styles.couponRow}>
-                  <TextInput
-                    accessibilityLabel="Coupon code"
-                    value={couponCode}
-                    editable={!couponResult}
-                    onChangeText={value => {
-                      setCouponCode(value);
-                      applyCoupon.reset();
-                    }}
-                    onSubmitEditing={applyCouponCode}
-                    placeholder="Promo / coupon code"
-                    autoCapitalize="characters"
-                    placeholderTextColor={theme.colors.secondary}
-                    style={[
-                      styles.couponInput,
-                      couponResult && styles.couponInputDisabled,
-                    ]}
-                  />
-                  {couponResult ? (
-                    <Button
-                      label="Remove"
-                      variant="secondary"
-                      onPress={removeCoupon}
+              <View style={styles.card}>
+                <StepHeading
+                  step={3}
+                  title="Review items"
+                  done
+                  aside={`${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+                />
+                {visibleItems?.map(item => (
+                  <OrderItemRow key={item.id} item={item} />
+                ))}
+                {data.items.length > PREVIEW_ITEMS && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showAllItems }}
+                    onPress={() => setShowAllItems(v => !v)}
+                    style={styles.showMore}
+                  >
+                    <AppText style={styles.showMoreText}>
+                      {showAllItems
+                        ? 'Show fewer items'
+                        : `Show all ${data.items.length} items`}
+                    </AppText>
+                    <Ionicons
+                      name={showAllItems ? 'chevron-up' : 'chevron-down'}
+                      size={15}
+                      color={theme.colors.primary}
                     />
-                  ) : (
-                    <Button
-                      label={applyCoupon.isPending ? '…' : 'Apply'}
-                      variant="secondary"
+                  </Pressable>
+                )}
+              </View>
+
+              <View style={styles.card}>
+                <View style={styles.cardTitleRow}>
+                  <Ionicons
+                    name="pricetag-outline"
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                  <AppText style={styles.cardTitle}>Coupons & offers</AppText>
+                </View>
+                {couponResult ? (
+                  <View style={styles.couponApplied}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={theme.colors.primary}
+                    />
+                    <View style={styles.flex}>
+                      <AppText style={styles.couponAppliedCode}>
+                        {couponResult.code} applied
+                      </AppText>
+                      <AppText style={styles.couponAppliedSave}>
+                        You save {money(couponResult.discount)}
+                      </AppText>
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove coupon ${couponResult.code}`}
+                      onPress={removeCoupon}
+                      hitSlop={8}
+                    >
+                      <AppText style={styles.removeCoupon}>Remove</AppText>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.couponRow}>
+                    <TextInput
+                      accessibilityLabel="Coupon code"
+                      value={couponCode}
+                      onChangeText={value => {
+                        setCouponCode(value);
+                        applyCoupon.reset();
+                      }}
+                      onSubmitEditing={applyCouponCode}
+                      placeholder="Enter coupon code"
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      placeholderTextColor="#9CA3AF"
+                      style={[
+                        styles.couponInput,
+                        applyCoupon.isError && styles.couponInputError,
+                      ]}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
                       disabled={applyCoupon.isPending || !couponCode.trim()}
                       onPress={applyCouponCode}
-                    />
-                  )}
-                </View>
+                      style={({ pressed }) => [
+                        styles.couponApply,
+                        (applyCoupon.isPending || !couponCode.trim()) &&
+                          styles.couponApplyDisabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      {applyCoupon.isPending ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={theme.colors.primary}
+                        />
+                      ) : (
+                        <AppText style={styles.couponApplyText}>Apply</AppText>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
                 {applyCoupon.isError && (
-                  <AppText style={styles.error}>
+                  <AppText style={styles.fieldError}>
                     {applyCoupon.error.message}
                   </AppText>
                 )}
               </View>
 
-              {!!error && (
-                <AppText accessibilityRole="alert" style={styles.error}>
-                  {error}
-                </AppText>
-              )}
-              <Button
-                label={ctaLabel}
-                disabled={ctaDisabled}
-                icon={
-                  mobileVerified &&
-                  !!selectedAddress &&
-                  (paymentMethod === 'razorpay' || isPartialCod) ? (
+              <View style={styles.card}>
+                <AppText style={styles.cardTitle}>Price details</AppText>
+                <View style={shop.between}>
+                  <AppText style={styles.summaryLabel}>
+                    Price ({itemCount} item{itemCount !== 1 ? 's' : ''})
+                  </AppText>
+                  <AppText style={styles.summaryValue}>
+                    {money(data.mrpSubtotal)}
+                  </AppText>
+                </View>
+                {data.productDiscount > 0 && (
+                  <View style={shop.between}>
+                    <AppText style={styles.summaryLabel}>
+                      Product discount
+                    </AppText>
+                    <AppText style={styles.discountValue}>
+                      −{money(data.productDiscount)}
+                    </AppText>
+                  </View>
+                )}
+                {data.quantityDiscount > 0 && (
+                  <View style={shop.between}>
+                    <AppText style={styles.summaryLabel}>
+                      Buy more save more
+                    </AppText>
+                    <AppText style={styles.discountValue}>
+                      −{money(data.quantityDiscount)}
+                    </AppText>
+                  </View>
+                )}
+                {couponResult && (
+                  <View style={shop.between}>
+                    <AppText style={styles.summaryLabel}>
+                      Coupon ({couponResult.code})
+                    </AppText>
+                    <AppText style={styles.discountValue}>
+                      −{money(couponResult.discount)}
+                    </AppText>
+                  </View>
+                )}
+                <View style={shop.between}>
+                  <AppText style={styles.summaryLabel}>Delivery</AppText>
+                  {cart.isFetching ? (
+                    <AppText style={styles.summaryLabel}>…</AppText>
+                  ) : data.shippingAmount === null ? (
+                    <AppText style={styles.summaryLabel}>
+                      Add an address
+                    </AppText>
+                  ) : data.shippingAmount === 0 ? (
+                    <AppText style={styles.discountValue}>FREE</AppText>
+                  ) : (
+                    <AppText style={styles.summaryValue}>
+                      {money(data.shippingAmount)}
+                    </AppText>
+                  )}
+                </View>
+                {codFee > 0 && (
+                  <View style={shop.between}>
+                    <AppText style={styles.summaryLabel}>COD fee</AppText>
+                    <AppText style={styles.summaryValue}>
+                      {money(codFee)}
+                    </AppText>
+                  </View>
+                )}
+                <View style={styles.payableRow}>
+                  <AppText style={styles.payableLabel}>Total amount</AppText>
+                  <AppText style={styles.payableLabel}>
+                    {recalculating ? 'Calculating…' : money(total)}
+                  </AppText>
+                </View>
+                {isPartialCod && !recalculating && (
+                  <View style={styles.advanceBox}>
+                    <View style={shop.between}>
+                      <AppText style={styles.advanceHighlight}>
+                        Pay now ({advancePercent}% advance)
+                      </AppText>
+                      <AppText style={styles.advanceHighlight}>
+                        {money(advanceAmount)}
+                      </AppText>
+                    </View>
+                    <View style={shop.between}>
+                      <AppText style={styles.advanceMuted}>
+                        Pay on delivery ({100 - advancePercent}%)
+                      </AppText>
+                      <AppText style={styles.advanceValue}>
+                        {money(codBalance)}
+                      </AppText>
+                    </View>
+                  </View>
+                )}
+                {totalSavings > 0 && (
+                  <View style={styles.savingsBanner}>
                     <Ionicons
-                      name="lock-closed-outline"
-                      size={16}
-                      color="#FFFFFF"
+                      name="sparkles-outline"
+                      size={15}
+                      color={theme.colors.primary}
                     />
-                  ) : undefined
-                }
-                onPress={
-                  mobileVerified && !selectedAddress
-                    ? () => router.push('/addresses/form')
-                    : submit
-                }
-              />
+                    <AppText style={styles.savingsText}>
+                      You're saving {money(totalSavings)} on this order
+                    </AppText>
+                  </View>
+                )}
+              </View>
 
               <View style={styles.trustRow}>
                 <View style={styles.trustItem}>
                   <Ionicons
                     name="shield-checkmark-outline"
-                    size={16}
+                    size={18}
                     color={theme.colors.primary}
                   />
-                  <AppText style={styles.trustLabel}>Secure checkout</AppText>
+                  <AppText style={styles.trustLabel}>Secure payments</AppText>
                 </View>
                 <View style={styles.trustItem}>
                   <Ionicons
-                    name="cube-outline"
-                    size={16}
+                    name="refresh-outline"
+                    size={18}
                     color={theme.colors.primary}
                   />
-                  <AppText style={styles.trustLabel}>
-                    {delivery > 0 ? 'Reliable shipping' : 'Free delivery'}
-                  </AppText>
+                  <AppText style={styles.trustLabel}>Easy returns</AppText>
                 </View>
                 <View style={styles.trustItem}>
                   <Ionicons
-                    name="time-outline"
-                    size={16}
+                    name="ribbon-outline"
+                    size={18}
                     color={theme.colors.primary}
                   />
-                  <AppText style={styles.trustLabel}>
-                    {data?.estimatedDelivery
-                      ? `Est. ${data.estimatedDelivery.display}`
-                      : 'Delivery estimate pending'}
-                  </AppText>
+                  <AppText style={styles.trustLabel}>Genuine products</AppText>
                 </View>
               </View>
             </>
           )}
         </ScrollView>
+
+        {hasItems && (
+          <View
+            style={[
+              styles.bottomBar,
+              { paddingBottom: Math.max(12, insets.bottom) },
+            ]}
+          >
+            {!!error && (
+              <View accessibilityRole="alert" style={styles.errorBanner}>
+                <Ionicons
+                  name="alert-circle"
+                  size={16}
+                  color={theme.colors.danger}
+                />
+                <AppText style={styles.errorText}>{error}</AppText>
+              </View>
+            )}
+            <View style={styles.bottomRow}>
+              <View style={styles.bottomTotal}>
+                <AppText style={styles.bottomAmount}>
+                  {recalculating ? '…' : money(payNow)}
+                </AppText>
+                <AppText numberOfLines={2} style={styles.bottomCaption}>
+                  {isPartialCod
+                    ? `+ ${money(codBalance)} on delivery`
+                    : totalSavings > 0
+                    ? `Saving ${money(totalSavings)}`
+                    : 'Total payable'}
+                </AppText>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  ctaKind === 'commit' && !placing && !recalculating
+                    ? `${ctaLabel}, ${money(payNow)}`
+                    : ctaLabel
+                }
+                accessibilityState={{
+                  disabled: ctaKind === 'commit' && ctaDisabled,
+                  busy: placing,
+                }}
+                disabled={ctaKind === 'commit' && ctaDisabled}
+                onPress={onCta}
+                style={({ pressed }) => [
+                  styles.cta,
+                  ctaKind === 'setup' ? styles.ctaSetup : styles.ctaCommit,
+                  ctaKind === 'commit' && ctaDisabled && styles.ctaDisabled,
+                  pressed && styles.pressed,
+                ]}
+              >
+                {placing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : ctaIcon ? (
+                  <Ionicons
+                    name={ctaIcon}
+                    size={16}
+                    color={
+                      ctaKind === 'setup' ? theme.colors.primary : '#FFFFFF'
+                    }
+                  />
+                ) : null}
+                <AppText
+                  numberOfLines={1}
+                  style={[
+                    styles.ctaText,
+                    ctaKind === 'setup' && styles.ctaTextSetup,
+                  ]}
+                >
+                  {ctaLabel}
+                </AppText>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {confirmingPayment && (
@@ -933,70 +1101,80 @@ export default function CheckoutScreen() {
     </View>
   );
 }
+const PAGE_BG = '#F4F6F8';
+const MUTED = '#6B7280';
+const SOFT = '#E8F5F3';
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: { padding: 16, gap: 12, paddingBottom: 32 },
+  page: { backgroundColor: PAGE_BG },
+  body: { padding: 16, gap: 14, paddingBottom: 24 },
   skeletonScroll: { flexGrow: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  hero: {
-    backgroundColor: theme.colors.primaryLight,
+  pressed: { opacity: 0.85 },
+  card: {
+    gap: 12,
+    padding: 16,
     borderRadius: 16,
-    padding: 18,
-    gap: 6,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  eyebrow: {
-    color: theme.colors.primary,
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle: {
     fontFamily: theme.fonts.semibold,
-    fontSize: 11,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  heroTitle: {
-    fontFamily: theme.fonts.bold,
-    fontSize: 22,
+    fontSize: 16,
     color: theme.colors.text,
   },
-  lead: {
-    color: theme.colors.secondary,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 2,
-  },
-  stepHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stepBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  secureStrip: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.primary,
+    gap: 6,
   },
+  secureStripText: { fontSize: 12, color: MUTED },
+
+  // Steps
+  stepHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#9CA3AF',
+  },
+  stepBadgeDone: { backgroundColor: theme.colors.primary },
   stepBadgeText: {
     color: '#FFFFFF',
     fontFamily: theme.fonts.semibold,
     fontSize: 12,
   },
-  section: {
-    gap: 8,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.card,
+  stepTitle: {
+    flex: 1,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 16,
+    color: theme.colors.text,
   },
+  stepAside: { fontSize: 13, color: MUTED },
+
+  // Addresses
   addressList: { gap: 10 },
   addressCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    padding: 12,
+    padding: 14,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
   },
   addressCardSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: '#F3FBF9',
   },
   addressCardHeader: {
     flexDirection: 'row',
@@ -1006,63 +1184,93 @@ const styles = StyleSheet.create({
   },
   addressName: { fontFamily: theme.fonts.semibold, fontSize: 14 },
   defaultBadge: {
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: theme.colors.primary,
+    borderRadius: 999,
+    backgroundColor: SOFT,
   },
   defaultBadgeText: {
-    color: '#FFFFFF',
+    color: theme.colors.primary,
     fontSize: 10,
     fontFamily: theme.fonts.semibold,
   },
-  addressCardActions: { alignItems: 'center', gap: 8 },
+  addressCardActions: { alignItems: 'center', gap: 10 },
   editButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  addAddressButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
+    backgroundColor: '#F3F4F6',
   },
   addressDetail: {
-    color: theme.colors.secondary,
+    color: '#4B5563',
     fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  addressPhone: {
-    color: theme.colors.secondary,
-    fontSize: 12,
+    lineHeight: 19,
     marginTop: 3,
   },
-  deliveryEstimate: {
-    color: theme.colors.primary,
-    fontFamily: theme.fonts.medium,
-    fontSize: 12,
+  addressPhone: { color: MUTED, fontSize: 12, marginTop: 4 },
+  addTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 52,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#9FD3CB',
+    backgroundColor: '#FAFEFD',
   },
+  addTileProminent: { paddingVertical: 18, backgroundColor: '#F3FBF9' },
+  addTilePressed: { backgroundColor: SOFT },
+  addTileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SOFT,
+  },
+  addTileIconLarge: { width: 44, height: 44, borderRadius: 22 },
+  addTileTitle: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+    color: theme.colors.primary,
+  },
+  addTileText: { fontSize: 12, lineHeight: 17, color: MUTED, marginTop: 2 },
+  estimate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+  },
+  estimateText: {
+    flex: 1,
+    color: theme.colors.text,
+    fontFamily: theme.fonts.medium,
+    fontSize: 13,
+  },
+
+  // Items
   itemRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
   },
   itemImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primaryLight,
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
   },
   itemInfo: { flex: 1, gap: 2 },
-  itemName: { fontFamily: theme.fonts.medium, fontSize: 14 },
+  itemName: { fontFamily: theme.fonts.medium, fontSize: 14, lineHeight: 19 },
   itemPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1070,7 +1278,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   itemStrike: {
-    color: theme.colors.secondary,
+    color: MUTED,
     fontSize: 12,
     textDecorationLine: 'line-through',
   },
@@ -1085,166 +1293,266 @@ const styles = StyleSheet.create({
     fontSize: 14,
     alignSelf: 'flex-start',
   },
+  showMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+  },
+  showMoreText: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 13,
+    color: theme.colors.primary,
+  },
+
+  // Payment
   paymentChoices: { gap: 10 },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    padding: 12,
+    padding: 14,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
   },
   paymentOptionSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: '#F3FBF9',
   },
   paymentOptionDisabled: { opacity: 0.55 },
   paymentIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.background,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: '#F3F4F6',
   },
-  paymentIconSelected: {
-    backgroundColor: '#FFFFFF',
-    borderColor: theme.colors.primary,
-  },
-  paymentTitle: { fontFamily: theme.fonts.medium, fontSize: 14 },
-  paymentSubtitle: {
-    color: theme.colors.secondary,
-    fontSize: 12,
-    marginTop: 1,
-  },
+  paymentIconSelected: { backgroundColor: SOFT },
+  paymentTitle: { fontFamily: theme.fonts.semibold, fontSize: 14 },
+  paymentSubtitle: { color: MUTED, fontSize: 12, marginTop: 1 },
   paymentSubtitleError: { color: theme.colors.danger },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#C4C9D0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioSelected: { borderColor: theme.colors.primary },
   radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
     backgroundColor: theme.colors.primary,
   },
+
+  // Coupon
+  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  couponInput: {
+    flex: 1,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontFamily: theme.fonts.medium,
+    fontSize: 14,
+    letterSpacing: 0.5,
+    color: theme.colors.text,
+    backgroundColor: '#F9FAFB',
+  },
+  couponInputError: { borderColor: '#FCA5A5' },
+  couponApply: {
+    minWidth: 84,
+    minHeight: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
+  couponApplyDisabled: { borderColor: theme.colors.border },
+  couponApplyText: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+    color: theme.colors.primary,
+  },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#9FD3CB',
+    backgroundColor: '#F3FBF9',
+  },
+  couponAppliedCode: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  couponAppliedSave: { fontSize: 12, color: theme.colors.primary },
+  removeCoupon: {
+    color: theme.colors.danger,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 13,
+  },
+  fieldError: { color: theme.colors.danger, fontSize: 12, marginTop: -4 },
+
+  // Price details
+  summaryLabel: { fontSize: 14, color: '#4B5563' },
   summaryValue: {
     fontFamily: theme.fonts.medium,
     fontSize: 14,
     color: theme.colors.text,
   },
-  discountLabel: {
+  discountValue: {
     color: theme.colors.primary,
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: theme.fonts.medium,
-  },
-  removeCoupon: {
-    color: theme.colors.danger,
-    fontSize: 11,
-    textDecorationLine: 'underline',
-    marginLeft: 6,
   },
   payableRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
-    paddingTop: 8,
-    marginTop: 2,
+    borderStyle: 'dashed',
+    paddingTop: 12,
   },
   payableLabel: {
     fontFamily: theme.fonts.bold,
-    fontSize: 15,
+    fontSize: 16,
     color: theme.colors.text,
   },
   advanceBox: {
     gap: 6,
     backgroundColor: '#EFF6FF',
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 12,
+    padding: 12,
   },
-  advanceMuted: { color: theme.colors.secondary, fontSize: 12 },
+  advanceMuted: { color: MUTED, fontSize: 13 },
   advanceValue: {
     color: theme.colors.text,
     fontFamily: theme.fonts.medium,
-    fontSize: 12,
+    fontSize: 13,
   },
   advanceHighlight: {
     color: '#1D4ED8',
     fontFamily: theme.fonts.semibold,
-    fontSize: 12,
-  },
-  advanceNote: {
-    color: '#1D4ED8',
-    fontSize: 11,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#DBEAFE',
+    fontSize: 13,
   },
   savingsBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.primaryLight,
-    borderRadius: 8,
-    padding: 8,
+    gap: 8,
+    backgroundColor: SOFT,
+    borderRadius: 10,
+    padding: 10,
   },
   savingsText: {
     color: theme.colors.primary,
-    fontSize: 12,
-    fontFamily: theme.fonts.medium,
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
   },
-  couponRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  couponInput: {
-    flex: 1,
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontFamily: theme.fonts.regular,
-    fontSize: 14,
-    color: theme.colors.text,
-  },
-  couponInputDisabled: { opacity: 0.5 },
+
+  // Banners
   warningBanner: {
     flexDirection: 'row',
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#FCD9A0',
-    backgroundColor: '#FEF3E7',
+    backgroundColor: '#FEF7EC',
   },
-  warningText: { color: '#A65C00', fontSize: 13, lineHeight: 18 },
-  warningLink: { marginTop: 2 },
-  error: { color: theme.colors.danger, fontSize: 13 },
+  warningTitle: {
+    color: '#92400E',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+  },
+  warningText: { color: '#A65C00', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+  },
+  errorText: {
+    flex: 1,
+    color: theme.colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   trustRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 4,
+    paddingTop: 2,
   },
   trustItem: { flex: 1, alignItems: 'center', gap: 4 },
-  trustLabel: {
-    color: theme.colors.secondary,
-    fontSize: 10,
-    textAlign: 'center',
+  trustLabel: { color: MUTED, fontSize: 11, textAlign: 'center' },
+
+  // Sticky bottom bar
+  bottomBar: {
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 12,
   },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Amount block takes the spare width; the button sizes to its short label.
+  bottomTotal: { flex: 1, minWidth: 0 },
+  bottomAmount: {
+    fontFamily: theme.fonts.bold,
+    fontSize: 19,
+    color: theme.colors.text,
+  },
+  bottomCaption: { fontSize: 11, color: theme.colors.primary },
+  cta: {
+    minWidth: 148,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 52,
+    borderRadius: 14,
+  },
+  ctaCommit: {
+    backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  ctaSetup: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
+  ctaDisabled: { opacity: 0.5 },
+  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15 },
+  ctaTextSetup: { color: theme.colors.primary },
+
   confirmOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(255,255,255,0.97)',

@@ -808,8 +808,18 @@ export function StoreImage({
     </View>
   );
 }
-export const money = (value: number) =>
-  '₹' + value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+/** "₹1,150" for whole rupees, "₹354.60" otherwise — never a lone decimal
+ * digit like "₹354.6". */
+export const money = (value: number) => {
+  const fraction = Number.isInteger(Math.round(value * 100) / 100) ? 0 : 2;
+  return (
+    '₹' +
+    value.toLocaleString('en-IN', {
+      minimumFractionDigits: fraction,
+      maximumFractionDigits: fraction,
+    })
+  );
+};
 export function WishlistHeart({
   product,
   size = 20,
