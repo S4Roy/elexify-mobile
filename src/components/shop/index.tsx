@@ -226,9 +226,13 @@ export const shop = StyleSheet.create({
     width: '100%',
     aspectRatio: 1.15,
     borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+  },
+  placeholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F0F1F3',
   },
-  placeholder: { alignItems: 'center', justifyContent: 'center' },
   imageWrap: { position: 'relative' },
   wishlistButton: {
     position: 'absolute',
@@ -315,8 +319,23 @@ export const shop = StyleSheet.create({
   cartStepperFullQty: {
     color: '#FFFFFF',
     fontFamily: theme.fonts.semibold,
-    fontSize: 17,
+    fontSize: 16,
+    lineHeight: 20,
   },
+  cartStepperFullCenter: { alignItems: 'center' },
+  cartStepperFullHint: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    lineHeight: 12,
+    opacity: 0.8,
+  },
+  cartFullOutline: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+  },
+  cartFullOutlineText: { color: theme.colors.primary },
+  cartStepperOutlineButton: { backgroundColor: theme.colors.primaryLight },
   cartQuantityControl: {
     width: 97,
     height: 34,
@@ -861,10 +880,13 @@ export function WishlistHeart({
 export function AddToCartControl({
   product,
   variant = 'compact',
+  outline = false,
 }: {
   product: Pick<Product, 'id' | 'variationId' | 'name' | 'inStock'>;
   /** 'compact' overlays a product image; 'full' is for details; 'cart' fits beside the cart price. */
   variant?: 'compact' | 'full' | 'cart';
+  /** 'full' only: outlined, as the secondary action beside a solid "Buy now". */
+  outline?: boolean;
 }) {
   const cart = useCart();
   const cartItem = cart.data?.items.find(
@@ -915,6 +937,7 @@ export function AddToCartControl({
     );
   }
   if (variant === 'full') {
+    const ink = outline ? theme.colors.primary : '#FFFFFF';
     if (qty <= 0) {
       return (
         <Pressable
@@ -924,36 +947,69 @@ export function AddToCartControl({
           onPress={() => commit(1)}
           style={({ pressed }) => [
             shop.cartAddButtonFull,
+            outline && shop.cartFullOutline,
             pressed && shop.iconPressed,
           ]}
         >
-          <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
-          <AppText style={shop.cartAddButtonFullText}>
+          <Ionicons name="cart-outline" size={20} color={ink} />
+          <AppText
+            style={[
+              shop.cartAddButtonFullText,
+              outline && shop.cartFullOutlineText,
+            ]}
+          >
             {mutation.isPending ? 'Adding…' : 'Add to cart'}
           </AppText>
         </Pressable>
       );
     }
     return (
-      <View style={shop.cartStepperFull}>
+      <View style={[shop.cartStepperFull, outline && shop.cartFullOutline]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Remove one ${product.name} from cart`}
           disabled={mutation.isPending}
           onPress={() => commit(qty - 1)}
-          style={shop.cartStepperFullButton}
+          style={[
+            shop.cartStepperFullButton,
+            outline && shop.cartStepperOutlineButton,
+          ]}
         >
-          <Ionicons name="remove" size={20} color="#FFFFFF" />
+          <Ionicons
+            name={qty === 1 ? 'trash-outline' : 'remove'}
+            size={18}
+            color={ink}
+          />
         </Pressable>
-        <AppText style={shop.cartStepperFullQty}>{qty}</AppText>
+        <View style={shop.cartStepperFullCenter}>
+          <AppText
+            style={[
+              shop.cartStepperFullQty,
+              outline && shop.cartFullOutlineText,
+            ]}
+          >
+            {qty}
+          </AppText>
+          <AppText
+            style={[
+              shop.cartStepperFullHint,
+              outline && shop.cartFullOutlineText,
+            ]}
+          >
+            in cart
+          </AppText>
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Add one more ${product.name} to cart`}
           disabled={mutation.isPending}
           onPress={() => commit(qty + 1)}
-          style={shop.cartStepperFullButton}
+          style={[
+            shop.cartStepperFullButton,
+            outline && shop.cartStepperOutlineButton,
+          ]}
         >
-          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Ionicons name="add" size={18} color={ink} />
         </Pressable>
       </View>
     );
