@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
 import { applyCoupon, fetchCart, manageCart } from '../../api/cart';
+import { addToWishlist } from '../../api/wishlist';
 import { useIdentity } from '../catalog/hooks';
 
 export function useCart(
@@ -38,6 +39,27 @@ export function useCartMutation(direct = false) {
     onSuccess: () => {
       queryClient
         .invalidateQueries({ queryKey: ['cart', identity] })
+        .catch(() => undefined);
+    },
+  });
+}
+
+/** Moves a cart line to the wishlist ("Save for later"), then drops it from
+ * the cart. Never un-saves an item that was already in the wishlist. */
+export function useSaveForLater() {
+  const identity = useIdentity();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { productId: string; variationId?: string }) => {
+      await addToWishlist(params);
+      await manageCart({ ...params, quantity: 0 }, false);
+    },
+    onSuccess: () => {
+      queryClient
+        .invalidateQueries({ queryKey: ['cart', identity] })
+        .catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: ['wishlist', identity] })
         .catch(() => undefined);
     },
   });
