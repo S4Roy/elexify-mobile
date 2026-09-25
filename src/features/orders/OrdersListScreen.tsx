@@ -1,84 +1,228 @@
 import React, { useEffect } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { AppText } from '../../components/ui';
 import {
   OrdersListSkeleton,
   ShopHeader,
+  StoreImage,
   money,
   shop,
 } from '../../components/shop';
+import { fmtDate, fmtDay } from './trackingFormat';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import { OrderSummary } from '../../api/order';
 import { useOrders } from './hooks';
-import { orderStatusColor, orderStatusLabel as statusLabel } from './tracking';
+import { orderStatusLabel as statusLabel } from './tracking';
 
-const fmtDate = (value: string) =>
-  value
-    ? new Date(value).toLocaleDateString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
-    : '';
+type Look = { icon: IconName; color: string; bg: string; text: string };
+
+/** Headline for the card: what state the order is in, and since when. */
+function statusLook(order: OrderSummary): Look {
+  const status = order.orderStatus.toLowerCase();
+  const on = (at: string | null) => (at ? ` on ${fmtDay(at)}` : '');
+  if (status === 'delivered') {
+    return {
+      icon: 'checkmark-circle',
+      color: '#15803D',
+      bg: '#F0FDF4',
+      text: `Delivered${on(order.deliveredAt)}`,
+    };
+  }
+  if (status.includes('cancel')) {
+    return {
+      icon: 'close-circle',
+      color: '#DC2626',
+      bg: '#FEF2F2',
+      text: `Cancelled${on(order.cancelledAt)}`,
+    };
+  }
+  if (status === 'failed') {
+    return {
+      icon: 'alert-circle',
+      color: '#6B7280',
+      bg: '#F3F4F6',
+      text: 'Order not placed — payment incomplete',
+    };
+  }
+  if (status.includes('return')) {
+    return {
+      icon: 'return-down-back',
+      color: '#B45309',
+      bg: '#FFFBEB',
+      text: status === 'returned' ? 'Returned' : 'Return in progress',
+    };
+  }
+  if (
+    order.paymentMethod !== 'cod' &&
+    ['pending', 'failed'].includes(order.paymentStatus)
+  ) {
+    return {
+      icon: 'time',
+      color: '#B45309',
+      bg: '#FFFBEB',
+      text: 'Payment pending',
+    };
+  }
+  if (status === 'out_for_delivery') {
+    return {
+      icon: 'bicycle',
+      color: '#4338CA',
+      bg: '#EEF2FF',
+      text: 'Out for delivery today',
+    };
+  }
+  if (status.includes('shipped') || status.includes('delivered')) {
+    return {
+      icon: 'car',
+      color: '#4338CA',
+      bg: '#EEF2FF',
+      text: `${statusLabel(order.orderStatus)}${on(order.shippedAt)}`,
+    };
+  }
+  return {
+    icon: 'cube',
+    color: theme.colors.primary,
+    bg: theme.colors.primaryLight,
+    text: statusLabel(order.orderStatus),
+  };
+}
+
+const isOngoing = (status: string) =>
+  !['delivered', 'returned', 'cancelled', 'failed'].includes(
+    status.toLowerCase(),
+  ) && !status.toLowerCase().includes('return');
 
 function Row({ order }: { order: OrderSummary }) {
-  const color = orderStatusColor(order.orderStatus);
+  const look = statusLook(order);
+  const [first] = order.previews;
+  const more = Math.max(0, order.totalItems - (first?.quantity ?? 0));
+  const status = order.orderStatus.toLowerCase();
+  const open = () =>
+    router.push({ pathname: '/orders/[id]', params: { id: order.id } });
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() =>
-        router.push({ pathname: '/orders/[id]', params: { id: order.id } })
-      }
+      accessibilityLabel={[
+        look.text,
+        first?.name,
+        `Order ${order.orderNumber}`,
+        money(order.grandTotal),
+      ]
+        .filter(Boolean)
+        .join('. ')}
+      onPress={open}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <View style={styles.headerRow}>
-        <View style={styles.iconBadge}>
-          <Ionicons
-            name="cube-outline"
-            size={19}
-            color={theme.colors.primary}
+      <View style={[styles.statusBar, { backgroundColor: look.bg }]}>
+        <Ionicons name={look.icon} size={16} color={look.color} />
+        <AppText
+          numberOfLines={1}
+          style={[styles.statusText, { color: look.color }]}
+        >
+          {look.text}
+        </AppText>
+        <Ionicons name="chevron-forward" size={16} color={look.color} />
+      </View>
+
+      <View style={styles.product}>
+        <View>
+          <StoreImage
+            uri={first?.image ?? undefined}
+            label={first?.name ?? ''}
+            style={styles.thumb}
           />
-        </View>
-        <View style={shop.flex}>
-          <View style={styles.titleRow}>
-            <AppText numberOfLines={1} style={styles.orderNumber}>
-              #{order.orderNumber}
-            </AppText>
-            <View style={[styles.statusPill, { backgroundColor: color.bg }]}>
-              <AppText style={[styles.statusPillText, { color: color.text }]}>
-                {statusLabel(order.orderStatus)}
+          {order.previews.length > 1 && (
+            <View style={styles.moreBadge}>
+              <AppText style={styles.moreBadgeText}>
+                +{order.previews.length - 1}
               </AppText>
             </View>
-          </View>
-          <AppText style={shop.muted}>
-            Placed on {fmtDate(order.createdAt)}
-          </AppText>
+          )}
         </View>
-        <Ionicons
-          name="chevron-forward"
-          size={18}
-          color={theme.colors.secondary}
-        />
-      </View>
-      <View style={styles.footerRow}>
-        <View>
-          <AppText style={styles.footerLabel}>Order total</AppText>
-          <AppText style={styles.footerTotal}>
-            {money(order.grandTotal)}
+        <View style={shop.flex}>
+          <AppText numberOfLines={2} style={styles.productName}>
+            {first?.name ??
+              `${order.totalItems} item${order.totalItems === 1 ? '' : 's'}`}
           </AppText>
-        </View>
-        <View style={styles.footerRight}>
-          <AppText style={styles.footerMeta}>
-            {order.totalItems} item{order.totalItems === 1 ? '' : 's'}
-          </AppText>
-          <AppText style={styles.footerMeta}>
-            {order.paymentMethod === 'cod' ? 'Cash on delivery' : 'Paid online'}
+          <AppText style={styles.productMeta}>
+            {first
+              ? more > 0
+                ? `Qty ${first.quantity} · +${more} more item${
+                    more === 1 ? '' : 's'
+                  }`
+                : `Qty ${first.quantity}`
+              : ''}
           </AppText>
         </View>
       </View>
+
+      <View style={styles.footer}>
+        <View style={shop.flex}>
+          <AppText style={styles.orderNumber}>#{order.orderNumber}</AppText>
+          <AppText style={styles.footerMeta}>
+            {fmtDate(order.createdAt)} ·{' '}
+            {order.paymentMethod === 'cod'
+              ? order.isPartialCod
+                ? 'Partial COD'
+                : 'Cash on delivery'
+              : 'Paid online'}
+          </AppText>
+        </View>
+        <AppText style={styles.total}>{money(order.grandTotal)}</AppText>
+      </View>
+
+      {(isOngoing(status) || status === 'delivered') && (
+        <View style={styles.actions}>
+          {isOngoing(status) ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: '/orders/[id]/track',
+                  params: { id: order.id },
+                })
+              }
+              style={({ pressed }) => [
+                styles.action,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="navigate-outline"
+                size={15}
+                color={theme.colors.primary}
+              />
+              <AppText style={styles.actionText}>Track order</AppText>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={open}
+              style={({ pressed }) => [
+                styles.action,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="star-outline"
+                size={15}
+                color={theme.colors.primary}
+              />
+              <AppText style={styles.actionText}>Rate & review</AppText>
+            </Pressable>
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -258,16 +402,68 @@ export default function OrdersListScreen() {
             orders.fetchNextPage().catch(() => undefined);
           }
         }}
-        ListHeaderComponent={
-          <QueryState
-            pending={orders.isPending}
-            error={orders.error}
-            paused={orders.fetchStatus === 'paused'}
-            retry={() => {
+        refreshControl={
+          <RefreshControl
+            refreshing={orders.isRefetching && !orders.isFetchingNextPage}
+            onRefresh={() => {
               orders.refetch().catch(() => undefined);
             }}
-            skeleton={<OrdersListSkeleton />}
+            colors={[theme.colors.primary]}
           />
+        }
+        ListHeaderComponent={
+          <>
+            {allItems.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chips}
+              >
+                {[
+                  {
+                    id: '' as const,
+                    label: 'All',
+                    icon: 'receipt-outline' as IconName,
+                  },
+                  ...VIEWS,
+                ].map(v => {
+                  const active = (view ?? '') === v.id;
+                  return (
+                    <Pressable
+                      key={v.id || 'all'}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => router.setParams({ view: v.id })}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <Ionicons
+                        name={v.icon}
+                        size={14}
+                        color={active ? '#FFFFFF' : theme.colors.primary}
+                      />
+                      <AppText
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
+                      >
+                        {v.id === 'completed' ? 'Delivered' : v.label}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <QueryState
+              pending={orders.isPending}
+              error={orders.error}
+              paused={orders.fetchStatus === 'paused'}
+              retry={() => {
+                orders.refetch().catch(() => undefined);
+              }}
+              skeleton={<OrdersListSkeleton />}
+            />
+          </>
         }
         ListFooterComponent={
           !orders.isPending && orders.isFetchingNextPage ? (
@@ -417,58 +613,127 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   card: {
-    padding: 14,
-    gap: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 14,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     marginBottom: 12,
+    overflow: 'hidden',
   },
-  cardPressed: { backgroundColor: theme.colors.background },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  iconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primaryLight,
-  },
-  titleRow: {
+  cardPressed: { opacity: 0.92 },
+  statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flexWrap: 'wrap',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  statusText: { flex: 1, fontSize: 13, fontFamily: theme.fonts.semibold },
+  product: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
+  thumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#EEF0F2',
+  },
+  moreBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    minWidth: 24,
+    height: 22,
+    paddingHorizontal: 5,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.text,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  moreBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: theme.fonts.semibold,
+  },
+  productName: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: theme.fonts.medium,
+    color: theme.colors.text,
+  },
+  productMeta: { marginTop: 2, fontSize: 12, color: theme.colors.secondary },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 14,
+    marginHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
   },
   orderNumber: {
     fontFamily: theme.fonts.semibold,
-    fontSize: 14,
-    flexShrink: 1,
+    fontSize: 13,
+    color: theme.colors.text,
   },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  statusPillText: { fontSize: 10, fontFamily: theme.fonts.semibold },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    paddingTop: 10,
-  },
-  footerLabel: {
-    color: theme.colors.secondary,
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  footerTotal: {
+  footerMeta: { marginTop: 1, color: theme.colors.secondary, fontSize: 12 },
+  total: {
     fontFamily: theme.fonts.bold,
     fontSize: 16,
     color: theme.colors.text,
-    marginTop: 2,
   },
-  footerRight: { alignItems: 'flex-end', gap: 2 },
-  footerMeta: { color: theme.colors.secondary, fontSize: 11 },
+  actions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  action: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#B2DFDB',
+  },
+  actionText: {
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
+    color: theme.colors.primary,
+  },
+  chips: { gap: 8, paddingBottom: 14 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
+  },
+  chipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  chipText: {
+    fontSize: 13,
+    fontFamily: theme.fonts.medium,
+    color: theme.colors.text,
+  },
+  chipTextActive: { color: '#FFFFFF' },
   loadingMore: { paddingVertical: 16, alignItems: 'center' },
 });

@@ -105,6 +105,17 @@ export type OrderSummary = {
   totalItems: number;
   currency: string;
   createdAt: string;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  /** First few line items (name, image, quantity) for the list card. */
+  previews: OrderItemPreview[];
+};
+
+export type OrderItemPreview = {
+  name: string;
+  image: string | null;
+  quantity: number;
 };
 
 function parseOrderSummary(value: unknown): OrderSummary | null {
@@ -124,6 +135,21 @@ function parseOrderSummary(value: unknown): OrderSummary | null {
     totalItems: number(o.total_items) ?? 0,
     currency: string(o.currency) || 'INR',
     createdAt: string(o.created_at),
+    shippedAt: string(o.shipped_at) || null,
+    deliveredAt: string(o.delivered_at) || null,
+    cancelledAt: string(record(o.cancellation).cancelled_at) || null,
+    previews: Array.isArray(o.item_previews)
+      ? o.item_previews
+          .map(p => {
+            const i = record(p);
+            return {
+              name: string(i.name),
+              image: string(i.image) || null,
+              quantity: number(i.quantity) ?? 0,
+            };
+          })
+          .filter(p => !!p.name)
+      : [],
   };
 }
 
