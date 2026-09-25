@@ -5,46 +5,135 @@ import { ShopHeader, shop } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import type { NotificationPreferences } from '../../api/account';
-import { useNotificationPreferences, useUpdateNotificationPreferences } from './hooks';
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from './hooks';
+import { PushOptInCard } from '../notifications/PushOptIn';
 
 type Group = keyof NotificationPreferences;
-type Row = { group: Group; key: string; label: string; channel: 'email' | 'sms' | 'whatsapp' | 'push' };
+type Row = {
+  group: Group;
+  key: string;
+  label: string;
+  channel: 'email' | 'sms' | 'whatsapp' | 'push';
+};
 
 const SECTIONS: { title: string; rows: Row[] }[] = [
   {
     title: 'Order & Payment',
     rows: [
-      { group: 'transactional', key: 'order_email', label: 'Order updates — Email', channel: 'email' },
-      { group: 'transactional', key: 'order_sms', label: 'Order updates — SMS', channel: 'sms' },
-      { group: 'transactional', key: 'order_whatsapp', label: 'Order updates — WhatsApp', channel: 'whatsapp' },
-      { group: 'transactional', key: 'payment_email', label: 'Payment receipts — Email', channel: 'email' },
-      { group: 'transactional', key: 'payment_sms', label: 'Payment receipts — SMS', channel: 'sms' },
-      { group: 'transactional', key: 'refund_email', label: 'Refunds — Email', channel: 'email' },
-      { group: 'transactional', key: 'refund_sms', label: 'Refunds — SMS', channel: 'sms' },
+      {
+        group: 'transactional',
+        key: 'order_email',
+        label: 'Order updates — Email',
+        channel: 'email',
+      },
+      {
+        group: 'transactional',
+        key: 'order_sms',
+        label: 'Order updates — SMS',
+        channel: 'sms',
+      },
+      {
+        group: 'transactional',
+        key: 'order_whatsapp',
+        label: 'Order updates — WhatsApp',
+        channel: 'whatsapp',
+      },
+      {
+        group: 'transactional',
+        key: 'payment_email',
+        label: 'Payment receipts — Email',
+        channel: 'email',
+      },
+      {
+        group: 'transactional',
+        key: 'payment_sms',
+        label: 'Payment receipts — SMS',
+        channel: 'sms',
+      },
+      {
+        group: 'transactional',
+        key: 'refund_email',
+        label: 'Refunds — Email',
+        channel: 'email',
+      },
+      {
+        group: 'transactional',
+        key: 'refund_sms',
+        label: 'Refunds — SMS',
+        channel: 'sms',
+      },
     ],
   },
   {
     title: 'Account Security',
     rows: [
-      { group: 'security', key: 'email', label: 'Security alerts — Email', channel: 'email' },
-      { group: 'security', key: 'sms', label: 'Security alerts — SMS', channel: 'sms' },
+      {
+        group: 'security',
+        key: 'email',
+        label: 'Security alerts — Email',
+        channel: 'email',
+      },
+      {
+        group: 'security',
+        key: 'sms',
+        label: 'Security alerts — SMS',
+        channel: 'sms',
+      },
     ],
   },
   {
     title: 'Offers & Marketing',
     rows: [
-      { group: 'marketing', key: 'push', label: 'Offers & discounts — Push', channel: 'push' },
-      { group: 'marketing', key: 'email', label: 'Offers & discounts — Email', channel: 'email' },
-      { group: 'marketing', key: 'sms', label: 'Offers & discounts — SMS', channel: 'sms' },
-      { group: 'marketing', key: 'whatsapp', label: 'Offers & discounts — WhatsApp', channel: 'whatsapp' },
+      {
+        group: 'marketing',
+        key: 'push',
+        label: 'Offers & discounts — Push',
+        channel: 'push',
+      },
+      {
+        group: 'marketing',
+        key: 'email',
+        label: 'Offers & discounts — Email',
+        channel: 'email',
+      },
+      {
+        group: 'marketing',
+        key: 'sms',
+        label: 'Offers & discounts — SMS',
+        channel: 'sms',
+      },
+      {
+        group: 'marketing',
+        key: 'whatsapp',
+        label: 'Offers & discounts — WhatsApp',
+        channel: 'whatsapp',
+      },
     ],
   },
   {
     title: 'Reminders',
     rows: [
-      { group: 'reminders', key: 'abandoned_cart_email', label: 'Abandoned cart — Email', channel: 'email' },
-      { group: 'reminders', key: 'abandoned_cart_whatsapp', label: 'Abandoned cart — WhatsApp', channel: 'whatsapp' },
-      { group: 'reminders', key: 'wishlist_email', label: 'Wishlist reminders — Email', channel: 'email' },
+      {
+        group: 'reminders',
+        key: 'abandoned_cart_email',
+        label: 'Abandoned cart — Email',
+        channel: 'email',
+      },
+      {
+        group: 'reminders',
+        key: 'abandoned_cart_whatsapp',
+        label: 'Abandoned cart — WhatsApp',
+        channel: 'whatsapp',
+      },
+      {
+        group: 'reminders',
+        key: 'wishlist_email',
+        label: 'Wishlist reminders — Email',
+        channel: 'email',
+      },
     ],
   },
 ];
@@ -52,7 +141,8 @@ const SECTIONS: { title: string; rows: Row[] }[] = [
 export default function PreferencesScreen() {
   const query = useNotificationPreferences();
   const update = useUpdateNotificationPreferences();
-  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [preferences, setPreferences] =
+    useState<NotificationPreferences | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -63,12 +153,18 @@ export default function PreferencesScreen() {
 
   const lockedPaths = new Set(query.data?.lockedPaths ?? []);
   const isChannelUnverified = (channel: Row['channel']) =>
-    channel === 'push' ? false : channel === 'email' ? !query.data?.emailVerified : !query.data?.mobileVerified;
+    channel === 'push'
+      ? false
+      : channel === 'email'
+      ? !query.data?.emailVerified
+      : !query.data?.mobileVerified;
 
   const toggle = (group: Group, key: string, value: boolean) => {
     setSaved(false);
     setPreferences(current =>
-      current ? { ...current, [group]: { ...current[group], [key]: value } } : current,
+      current
+        ? { ...current, [group]: { ...current[group], [key]: value } }
+        : current,
     );
   };
 
@@ -92,13 +188,18 @@ export default function PreferencesScreen() {
           }}
         />
         {!query.isPending && !query.isError && !preferences && (
-          <Feedback title="Unable to load your preferences" message="Please try again." />
+          <Feedback
+            title="Unable to load your preferences"
+            message="Please try again."
+          />
         )}
         {preferences && (
           <>
             <AppText style={shop.muted}>
-              Choose how you&apos;d like to hear from us. Required service notifications can&apos;t be turned off.
+              Choose how you&apos;d like to hear from us. Required service
+              notifications can&apos;t be turned off.
             </AppText>
+            <PushOptInCard variant="settings" />
             {SECTIONS.map(section => (
               <View key={section.title} style={styles.card}>
                 <AppText style={styles.sectionTitle}>{section.title}</AppText>
@@ -106,12 +207,18 @@ export default function PreferencesScreen() {
                   const path = `${row.group}.${row.key}`;
                   const locked = lockedPaths.has(path);
                   const unverified = isChannelUnverified(row.channel);
-                  const checked = !!(preferences[row.group] as Record<string, boolean>)[row.key];
+                  const checked = !!(
+                    preferences[row.group] as Record<string, boolean>
+                  )[row.key];
                   return (
                     <View key={path} style={styles.row}>
                       <View style={shop.flex}>
                         <AppText style={styles.rowLabel}>{row.label}</AppText>
-                        {locked && <AppText style={styles.lockedNote}>Required service notification</AppText>}
+                        {locked && (
+                          <AppText style={styles.lockedNote}>
+                            Required service notification
+                          </AppText>
+                        )}
                         {!locked && unverified && (
                           <AppText style={styles.unverifiedNote}>
                             {row.channel === 'email'
@@ -124,14 +231,19 @@ export default function PreferencesScreen() {
                         value={locked ? true : unverified ? false : checked}
                         disabled={locked || unverified}
                         onValueChange={v => toggle(row.group, row.key, v)}
-                        trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
+                        trackColor={{
+                          true: theme.colors.primary,
+                          false: theme.colors.border,
+                        }}
                       />
                     </View>
                   );
                 })}
               </View>
             ))}
-            {saved && <AppText style={styles.success}>Preferences saved.</AppText>}
+            {saved && (
+              <AppText style={styles.success}>Preferences saved.</AppText>
+            )}
             <Button
               label={update.isPending ? 'Saving…' : 'Save preferences'}
               disabled={update.isPending}
@@ -153,7 +265,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  sectionTitle: { fontFamily: theme.fonts.semibold, fontSize: 13, color: theme.colors.secondary },
+  sectionTitle: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 13,
+    color: theme.colors.secondary,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowLabel: { fontSize: 14 },
   lockedNote: { color: theme.colors.primary, fontSize: 11 },

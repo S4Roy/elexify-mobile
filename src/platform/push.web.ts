@@ -6,6 +6,10 @@ export type PushMessage = {
 export async function requestPushPermission() {
   return false;
 }
+export type PushPermission = 'unavailable' | 'granted' | 'denied';
+export async function pushPermissionStatus(): Promise<PushPermission> {
+  return 'unavailable';
+}
 export async function currentPushToken(): Promise<string | null> {
   return null;
 }

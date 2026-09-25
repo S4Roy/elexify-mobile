@@ -15,6 +15,7 @@ import { SkeletonBlock, StoreImage, money, shop } from '../../components/shop';
 import { theme } from '../../theme';
 import { useOrderDetail } from '../orders/hooks';
 import { friendlyReason } from './friendlyReason';
+import { PushOptInCard } from '../notifications/PushOptIn';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -392,6 +393,9 @@ export default function CheckoutResultScreen() {
           </View>
         )}
 
+        {/* Highest-intent moment to ask for notification permission. */}
+        {ok && <PushOptInCard variant="order" throttled />}
+
         {ok ? (
           <View style={styles.card}>
             <AppText style={styles.cardTitle}>What happens next</AppText>
@@ -473,25 +477,21 @@ export default function CheckoutResultScreen() {
           </Pressable>
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
       {/* No header on this screen, so give the status bar a solid backdrop —
           otherwise the scrolled content shows through behind the clock. */}
       <View
         pointerEvents="none"
         style={[styles.statusBarBackdrop, { height: insets.top }]}
       />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   alignEnd: { alignItems: 'flex-end' },
   pressed: { opacity: 0.85 },
   page: { backgroundColor: '#F4F6F8' },
-  body: { paddingHorizontal: 16, alignItems: 'center', gap: 14 },
-
-  badgeWrap: {
-    width: 128,
   statusBarBackdrop: {
     position: 'absolute',
     top: 0,
@@ -499,6 +499,10 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#F4F6F8',
   },
+  body: { paddingHorizontal: 16, alignItems: 'center', gap: 14 },
+
+  badgeWrap: {
+    width: 128,
     height: 128,
     alignItems: 'center',
     justifyContent: 'center',

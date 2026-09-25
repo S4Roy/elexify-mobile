@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useUnreadNotificationCount } from '../../features/notifications/hooks';
+import { useWindowInsets } from '../NavigationBarInset';
 import {
   Animated,
   Easing,
@@ -14,11 +16,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { router, type Href } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../ui';
 import { theme } from '../../theme';
 import type { Category, Product } from '../../api/discovery';
@@ -707,6 +706,7 @@ export function ShopHeader({
   back = false,
   deliveryLabel,
   scrollY,
+  notifications = search,
 }: {
   title?: string;
   /** Home variant: large logo; pair with <HomeSearchPanel> as the first item
@@ -720,8 +720,12 @@ export function ShopHeader({
    * the list scrolls made the list resize too and the two fed back into each
    * other (visible shaking at the sticky point). */
   scrollY?: Animated.Value;
+  /** Bell with the unread count. On by default for the home header only —
+   * inner screens keep just search + cart, as most shopping apps do. */
+  notifications?: boolean;
 }) {
   const { width } = useWindowDimensions();
+  const unread = useUnreadNotificationCount();
   const scale = Math.min(width / 440, 1.2);
   const cart = useCart();
   const cartCount =
@@ -813,6 +817,14 @@ export function ShopHeader({
               name="search-outline"
               label="Search products"
               onPress={() => router.push('/search')}
+            />
+          )}
+          {notifications && (
+            <IconButton
+              name="notifications-outline"
+              label="Notifications"
+              badge={unread}
+              onPress={() => router.push('/notifications' as Href)}
             />
           )}
           <IconButton
@@ -1815,7 +1827,7 @@ export function BottomSheet({
   children: SheetContent;
 }) {
   const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const insets = useWindowInsets();
   const translateY = useRef(new Animated.Value(height)).current;
   useEffect(() => {
     const animation = Animated.timing(translateY, {

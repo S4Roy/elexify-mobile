@@ -153,7 +153,15 @@ dependencies {
     }
 }
 
-// Environment-specific Firebase client config is supplied at build time.
-if (file("google-services.json").exists()) {
+// Environment-specific Firebase client config is supplied at build time
+// (all gitignored):
+//   src/debug/google-services.json   -> elexify-dev    (local/dev builds)
+//   src/release/google-services.json -> elexify-online (Play builds)
+// The plugin picks the file for the variant being built. A variant without
+// one still builds, with push disabled at runtime (no Firebase app).
+if (["google-services.json", "src/debug/google-services.json", "src/release/google-services.json"].any { file(it).exists() }) {
     apply plugin: "com.google.gms.google-services"
+    googleServices {
+        missingGoogleServicesStrategy = com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.WARN
+    }
 }

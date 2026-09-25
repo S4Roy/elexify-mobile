@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useUnreadNotificationCount } from '../notifications/hooks';
 import {
   Pressable,
   RefreshControl,
@@ -265,6 +266,7 @@ export default function AccountScreen() {
   const account = useAccount();
   const addresses = useAddresses();
   const wishlist = useWishlist();
+  const unreadNotifications = useUnreadNotificationCount();
   const orders = useOrders();
   const compareCount = useCompareStore(s => s.items.length);
   const [refreshing, setRefreshing] = useState(false);
@@ -392,7 +394,12 @@ export default function AccountScreen() {
             <OrdersCard />
 
             <Group title="Shopping">
-              <Row icon="notifications-outline" label="Notifications" href={"/notifications" as Href} />
+              <Row
+                icon="notifications-outline"
+                label="Notifications"
+                count={unreadNotifications}
+                href={'/notifications' as Href}
+              />
               <Row
                 icon="heart-outline"
                 label="Wishlist"

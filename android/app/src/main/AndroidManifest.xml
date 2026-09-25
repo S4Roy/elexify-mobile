@@ -2,6 +2,9 @@
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
   <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:theme="@style/AppTheme" android:usesCleartextTraffic="${usesCleartextTraffic}" android:supportsRtl="true" android:fullBackupContent="@xml/secure_store_backup_rules" android:dataExtractionRules="@xml/secure_store_data_extraction_rules">
+    <!-- Push notification look: monochrome icon; channel and colour come
+         from firebase.json (react-native-firebase). -->
+    <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_notification"/>
     <activity android:name=".MainActivity" android:label="@string/app_name" android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -14,9 +17,6 @@
         <data android:scheme="elexify"/>
         <data android:scheme="exp+elexify-mobile"/>
       </intent-filter>
-    </activity>
-  </application>
-</manifest>
       <!-- Android App Links: elexify.online links open the matching screen
            (mapped in app/+native-intent.tsx). Verified by
            https://elexify.online/.well-known/assetlinks.json. www is left out
@@ -46,3 +46,6 @@
         <data android:pathPrefix="/refund-cancellations-policy"/>
         <data android:pathPrefix="/page/"/>
       </intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -1,6 +1,8 @@
 import { api } from './client';
 export type InboxNotification = {
   _id: string;
+  /** Backend event type, e.g. ORDER_SHIPPED, PAYMENT_FAILED, PRICE_DROP. */
+  type?: string;
   title: string;
   body: string;
   route?: string;

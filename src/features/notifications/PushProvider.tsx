@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { apiConfig } from '../../api/config';
 import { useEffect, useRef } from 'react';
-import { Alert, AppState, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 import Constants from 'expo-constants';
@@ -20,6 +20,7 @@ import {
   requestPushPermission,
 } from '../../platform/push';
 import { setPushCleanup } from '../../platform/pushLifecycle';
+import { InAppBanner, showInAppBanner } from './InAppBanner';
 let registration: Promise<void> = Promise.resolve();
 let loggingOut = false;
 async function installationId() {
@@ -171,15 +172,14 @@ export function PushProvider() {
           getNotification(message.notificationId)
             .then(notification => {
               if (identity !== useSession.getState().token) return;
-              Alert.alert(notification.title, notification.body, [
-                { text: 'Dismiss', style: 'cancel' },
-                {
-                  text: 'Open',
-                  onPress: () => {
-                    openRef.current(notification._id).catch(() => undefined);
-                  },
+              showInAppBanner({
+                id: notification._id,
+                title: notification.title,
+                body: notification.body,
+                onPress: () => {
+                  openRef.current(notification._id).catch(() => undefined);
                 },
-              ]);
+              });
             })
             .catch(() => undefined);
         }
@@ -201,5 +201,5 @@ export function PushProvider() {
       appState.remove();
     };
   }, [client]);
-  return null;
+  return <InAppBanner />;
 }

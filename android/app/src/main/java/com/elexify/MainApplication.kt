@@ -39,6 +39,7 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
+    NotificationChannels.register(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
 

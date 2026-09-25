@@ -1,3 +1,5 @@
 <resources>
     <color name="splashBackground">#00796A</color>
+    <!-- Accent for notification icons/actions (brand teal). -->
+    <color name="notification_color">#00796A</color>
 </resources>

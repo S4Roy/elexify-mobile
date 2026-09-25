@@ -33,6 +33,23 @@ export async function requestPushPermission() {
     status === AuthorizationStatus.PROVISIONAL
   );
 }
+export type PushPermission = 'unavailable' | 'granted' | 'denied';
+
+/** Current permission without prompting — drives the inbox's opt-in banner. */
+export async function pushPermissionStatus(): Promise<PushPermission> {
+  if (!enabled()) return 'unavailable';
+  if (Platform.OS === 'android' && Number(Platform.Version) >= 33)
+    return (await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    ))
+      ? 'granted'
+      : 'denied';
+  const status = await hasPermission(getMessaging());
+  return status === AuthorizationStatus.AUTHORIZED ||
+    status === AuthorizationStatus.PROVISIONAL
+    ? 'granted'
+    : 'denied';
+}
 export async function currentPushToken() {
   if (!enabled()) return null;
   if (
