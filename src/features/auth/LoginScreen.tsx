@@ -28,6 +28,8 @@ export default function LoginScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  // Bumped on every OTP send so the SMS listener restarts after a resend.
+  const [otpRequest, setOtpRequest] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const sendOtp = useSendOtp();
@@ -50,16 +52,20 @@ export default function LoginScreen() {
         setOtp('');
         setStep('verify');
         setCooldown(60);
+        setOtpRequest(n => n + 1);
       },
       onError: err => setError(err.message),
     });
   };
-  const submitOtp = () => {
+  const submitOtp = (code = otp) => {
+    if (verifyOtp.isPending) {
+      return;
+    }
     setError(null);
     verifyOtp.mutate(
       {
         mobile,
-        otp,
+        otp: code,
         firstName: isExisting ? undefined : firstName.trim(),
         lastName: isExisting ? undefined : lastName.trim(),
       },
@@ -223,7 +229,19 @@ export default function LoginScreen() {
               <AppText style={[shop.muted, styles.centerText]}>
                 Enter the 6-digit code sent to +91 {mobile}.
               </AppText>
-              <OtpInput value={otp} onChange={setOtp} autoFocus />
+              <OtpInput
+                value={otp}
+                onChange={setOtp}
+                autoFocus
+                listenKey={otpRequest}
+                // Returning users go straight in once the code is complete;
+                // new users still need to add their name first.
+                onComplete={code => {
+                  if (isExisting) {
+                    submitOtp(code);
+                  }
+                }}
+              />
               {!isExisting && (
                 <>
                   <AppText style={styles.label}>
@@ -264,7 +282,7 @@ export default function LoginScreen() {
                   verifyOtp.isPending ||
                   (!isExisting && (!firstName.trim() || !lastName.trim()))
                 }
-                onPress={submitOtp}
+                onPress={() => submitOtp()}
               />
               <View style={shop.between}>
                 <Pressable

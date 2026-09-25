@@ -143,6 +143,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // SMS User Consent API for one-tap OTP fill (smsconsent/SmsUserConsentModule.kt).
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.1.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

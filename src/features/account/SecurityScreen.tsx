@@ -66,6 +66,8 @@ function ChangeContactCard({
   const [step, setStep] = useState<'idle' | 'enter' | 'otp'>('idle');
   const [value, setValue] = useState('');
   const [otp, setOtp] = useState('');
+  // Bumped on every send/resend so the SMS listener restarts.
+  const [otpRequest, setOtpRequest] = useState(0);
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState('');
   const requestEmail = useRequestEmailChange();
@@ -106,15 +108,17 @@ function ChangeContactCard({
         setOtp('');
         setStep('otp');
         setCooldown(60);
+        setOtpRequest(n => n + 1);
       },
       onError: err => setError(err.message),
     });
   };
-  const submitOtp = () => {
+  const submitOtp = (code = otp) => {
+    if (verifying.isPending) {
+      return;
+    }
     setError('');
-    const mutate =
-      channel === 'email' ? verifyEmail.mutate : verifyMobile.mutate;
-    mutate(otp, {
+    verifying.mutate(code, {
       onSuccess: () => setStep('idle'),
       onError: err => setError(err.message),
     });
@@ -124,7 +128,10 @@ function ChangeContactCard({
       return;
     }
     resend.mutate(channel === 'email' ? 'change_email' : 'change_mobile', {
-      onSuccess: () => setCooldown(60),
+      onSuccess: () => {
+        setCooldown(60);
+        setOtpRequest(n => n + 1);
+      },
     });
   };
 
@@ -189,12 +196,19 @@ function ChangeContactCard({
           <AppText style={shop.muted}>
             Enter the 6-digit code sent to your new {label.toLowerCase()}
           </AppText>
-          <OtpInput value={otp} onChange={setOtp} autoFocus />
+          <OtpInput
+            value={otp}
+            onChange={setOtp}
+            autoFocus
+            smsConsent={channel === 'mobile'}
+            listenKey={otpRequest}
+            onComplete={submitOtp}
+          />
           {!!error && <AppText style={styles.error}>{error}</AppText>}
           <Button
             label={verifying.isPending ? 'Verifying…' : 'Verify'}
             disabled={!otpPattern.test(otp) || verifying.isPending}
-            onPress={submitOtp}
+            onPress={() => submitOtp()}
           />
           <View style={shop.between}>
             <Pressable

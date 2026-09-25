@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
+import { useSmsUserConsent } from '../../platform/smsUserConsent';
+import { normalizeOtpInput } from '../../utils/otp';
 
 export function AppText({ style, ...props }: TextProps) {
   return <Text {...props} style={[styles.text, style]} />;
@@ -53,22 +55,51 @@ export function Button({
     </Pressable>
   );
 }
-/** Boxed one-time-code input: a single hidden TextInput (so paste and SMS
- * autofill work normally) rendered as separate digit boxes for a modern feel. */
+/** Boxed one-time-code input: a single hidden TextInput (so paste, iOS
+ * "From Messages" and Android autofill work normally) rendered as separate
+ * digit boxes. On Android it also listens for the OTP SMS via the SMS User
+ * Consent API and fills the code after a one-tap system prompt. */
 export function OtpInput({
   value,
   onChange,
   length = 6,
   autoFocus,
+  onComplete,
+  smsConsent = true,
+  listenKey,
 }: {
   value: string;
   onChange: (value: string) => void;
   length?: number;
   autoFocus?: boolean;
+  /** Called once all `length` digits are present (typed, pasted or autofilled). */
+  onComplete?: (code: string) => void;
+  /** Listen for the code by SMS (Android). Turn off for email codes. */
+  smsConsent?: boolean;
+  /** Change after each resend so a fresh SMS listen starts. */
+  listenKey?: string | number;
 }) {
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   const activeIndex = Math.min(value.length, length - 1);
+
+  const accept = (code: string) => {
+    onChange(code);
+    if (code.length === length) {
+      onComplete?.(code);
+    }
+  };
+
+  useSmsUserConsent({
+    enabled: smsConsent,
+    length,
+    listenKey,
+    onCode: code => {
+      accept(code);
+      inputRef.current?.blur();
+    },
+  });
+
   return (
     <Pressable
       accessibilityRole="none"
@@ -91,17 +122,25 @@ export function OtpInput({
       )}
       <TextInput
         ref={inputRef}
-        accessibilityLabel="OTP"
+        accessibilityLabel={`One-time code, ${length} digits`}
         value={value}
-        onChangeText={v => onChange(v.replace(/\D/g, '').slice(0, length))}
+        onChangeText={next => {
+          const code = normalizeOtpInput(value, next, length);
+          if (code !== value) {
+            accept(code);
+          }
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         keyboardType="number-pad"
-        maxLength={length}
+        // No maxLength: it truncates an autofilled code inserted after
+        // already-typed digits; normalizeOtpInput caps the length instead.
         autoFocus={autoFocus}
         textContentType="oneTimeCode"
         autoComplete="sms-otp"
+        importantForAutofill="yes"
         caretHidden
+        selectionColor="transparent"
         style={otpStyles.hiddenInput}
       />
     </Pressable>
@@ -234,12 +273,12 @@ const otpStyles = StyleSheet.create({
     fontSize: 20,
     color: theme.colors.text,
   },
+  // Nearly (not fully) transparent: some Android keyboards and autofill
+  // services skip a view at opacity 0, and then never offer the SMS code.
   hiddenInput: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0,
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.011,
+    color: 'transparent',
+    fontSize: 1,
   },
 });
