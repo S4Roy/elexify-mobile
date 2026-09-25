@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Elexify",
+    "slug": "elexify-mobile",
+    "scheme": "elexify",
+    "version": "1.0.0",
+    "android": {
+      "package": "com.elexify"
+    }
+  }
+}
