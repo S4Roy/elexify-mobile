@@ -54,10 +54,20 @@ export function showsPackageProgress(pkg: OrderPackage): boolean {
   return !['cancelled', 'returned'].includes(pkg.status);
 }
 
+// Mirrors elexify.online's STATUS_LABELS so a status reads the same on both
+// platforms. Also used for payment statuses, which fall through to the
+// humanized value.
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  confirmed: 'Order confirmed',
+  processing: 'Processing',
+  cancel_requested: 'Cancellation requested',
+};
+
 export const orderStatusLabel = (status: string) =>
-  status
+  ORDER_STATUS_LABELS[status] ??
+  (status
     ? status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')
-    : 'Pending';
+    : 'Pending');
 
 // Mirrors elexify.online's STATUS_STYLES (account/orders/page.tsx and
 // account/orders/[id]/page.tsx) so a given order status reads with the same
@@ -65,7 +75,7 @@ export const orderStatusLabel = (status: string) =>
 const ORDER_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF9C3', text: '#A16207' },
   confirmed: { bg: '#DBEAFE', text: '#1D4ED8' },
-  processing: { bg: '#DBEAFE', text: '#1D4ED8' },
+  processing: { bg: '#EDE9FE', text: '#6D28D9' },
   packed: { bg: '#DBEAFE', text: '#1D4ED8' },
   partially_shipped: { bg: '#E0F2FE', text: '#0369A1' },
   shipped: { bg: '#E0E7FF', text: '#4338CA' },
@@ -110,6 +120,8 @@ const INVOICE_ELIGIBLE_STATUSES = [
   'shipped',
   'out_for_delivery',
   'delivered',
+  'partially_shipped',
+  'partially_delivered',
 ];
 
 export function canDownloadInvoice(

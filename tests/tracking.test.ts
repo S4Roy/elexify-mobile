@@ -1,5 +1,7 @@
 import {
   canDownloadInvoice,
+  orderStatusColor,
+  orderStatusLabel,
   packageStepDate,
   packageStepReached,
   showsPackageProgress,
@@ -46,7 +48,9 @@ test('showsPackageProgress hides the step tracker for cancelled/returned package
 });
 
 test('canDownloadInvoice allows eligible order statuses even before an invoice is generated', () => {
+  expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'confirmed' })).toBe(true);
   expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'processing' })).toBe(true);
+  expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'partially_shipped' })).toBe(true);
   expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'delivered' })).toBe(true);
 });
 
@@ -57,4 +61,11 @@ test('canDownloadInvoice allows a generated invoice regardless of order status',
 test('canDownloadInvoice is false before an order is confirmed and no invoice exists yet', () => {
   expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'pending' })).toBe(false);
   expect(canDownloadInvoice({ invoiceGenerated: false, orderStatus: 'cancelled' })).toBe(false);
+});
+
+test('orderStatusLabel distinguishes a confirmed order from one being processed', () => {
+  expect(orderStatusLabel('confirmed')).toBe('Order confirmed');
+  expect(orderStatusLabel('processing')).toBe('Processing');
+  expect(orderStatusLabel('out_for_delivery')).toBe('Out for delivery');
+  expect(orderStatusColor('confirmed')).not.toEqual(orderStatusColor('processing'));
 });
