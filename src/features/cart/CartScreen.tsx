@@ -14,6 +14,7 @@ import { AppText } from '../../components/ui';
 import {
   AddToCartControl,
   CartSkeleton,
+  ProductCard,
   ShopHeader,
   StoreImage,
   money,
@@ -24,6 +25,8 @@ import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
 import { CartItem } from '../../api/cart';
 import { useCart, useCartMutation, useSaveForLater } from './hooks';
+import { useAddresses } from '../address/hooks';
+import { useAlsoLike } from '../product/hooks';
 
 const PAGE_BG = '#F4F6F8';
 const MUTED = '#6B7280';
@@ -90,9 +93,7 @@ function ItemCard({
             accessibilityLabel={`View ${item.name}`}
             onPress={goToProduct}
           >
-            <AppText numberOfLines={2} style={styles.itemName}>
-              {item.name}
-            </AppText>
+            <AppText style={styles.itemName}>{item.name}</AppText>
           </Pressable>
           <View style={styles.priceRow}>
             <AppText style={styles.price}>
@@ -183,6 +184,105 @@ function ItemCard({
   );
 }
 
+/** Amazon/Flipkart-style "Deliver to" strip so the destination is confirmed
+ * before checkout. */
+function DeliverTo() {
+  const addresses = useAddresses();
+  const items = addresses.data?.items ?? [];
+  const address = items.find(a => a.isDefault) ?? items[0];
+  if (addresses.isPending) {
+    return null;
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        address
+          ? `Deliver to ${address.firstName}, ${address.postcode}. Change address`
+          : 'Add a delivery address'
+      }
+      onPress={() => router.push(address ? '/addresses' : '/addresses/form')}
+      style={({ pressed }) => [styles.deliver, pressed && styles.pressed]}
+    >
+      <View style={styles.deliverIcon}>
+        <Ionicons
+          name="location-outline"
+          size={17}
+          color={theme.colors.primary}
+        />
+      </View>
+      <View style={styles.flex}>
+        {address ? (
+          <>
+            <AppText numberOfLines={1} style={styles.deliverTitle}>
+              Deliver to{' '}
+              <AppText style={styles.deliverStrong}>
+                {address.firstName}, {address.postcode}
+              </AppText>
+            </AppText>
+            <AppText numberOfLines={1} style={styles.deliverLine}>
+              {[address.addressLine1, address.city.name]
+                .filter(Boolean)
+                .join(', ')}
+            </AppText>
+          </>
+        ) : (
+          <>
+            <AppText style={styles.deliverStrong}>
+              Add a delivery address
+            </AppText>
+            <AppText style={styles.deliverLine}>
+              See delivery options at checkout
+            </AppText>
+          </>
+        )}
+      </View>
+      <View style={styles.deliverChange}>
+        <AppText style={styles.deliverChangeText}>
+          {address ? 'Change' : 'Add'}
+        </AppText>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Cross-sell rail from the first cart item's "also like" products, minus
+ * anything already in the cart. */
+function Recommendations({
+  slug,
+  exclude,
+}: {
+  slug: string;
+  exclude: Set<string>;
+}) {
+  const alsoLike = useAlsoLike(slug);
+  const items = (alsoLike.data ?? []).filter(p => !exclude.has(p.id));
+  if (!items.length) {
+    return null;
+  }
+  return (
+    <View style={styles.recs}>
+      <View style={styles.recsHead}>
+        <AppText accessibilityRole="header" style={styles.cardTitle}>
+          Frequently bought together
+        </AppText>
+        <AppText style={styles.recsSub}>Complete your build</AppText>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.recsRail}
+      >
+        {items.slice(0, 10).map(product => (
+          <View key={product.key} style={styles.recsCard}>
+            <ProductCard product={product} />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function CartScreen() {
   const cart = useCart();
   const mutation = useCartMutation();
@@ -191,6 +291,8 @@ export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const data = cart.data;
   const [refreshing, setRefreshing] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const [summaryY, setSummaryY] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     undo?: CartItem;
@@ -261,6 +363,7 @@ export default function CartScreen() {
         back
       />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[styles.body, !hasItems && styles.bodyEmpty]}
         refreshControl={
           <RefreshControl
@@ -336,18 +439,7 @@ export default function CartScreen() {
 
         {hasItems && data && (
           <>
-            {savings > 0 && (
-              <View style={styles.savingsStrip}>
-                <Ionicons
-                  name="sparkles-outline"
-                  size={16}
-                  color={theme.colors.primary}
-                />
-                <AppText style={styles.savingsStripText}>
-                  You're saving {money(savings)} on this order
-                </AppText>
-              </View>
-            )}
+            {isAuthenticated && <DeliverTo />}
 
             {data.items.map(item => (
               <ItemCard
@@ -375,7 +467,15 @@ export default function CartScreen() {
               </View>
             </View>
 
-            <View style={styles.card}>
+            <Recommendations
+              slug={data.items[0].slug}
+              exclude={new Set(data.items.map(i => i.productId))}
+            />
+
+            <View
+              style={styles.card}
+              onLayout={e => setSummaryY(e.nativeEvent.layout.y)}
+            >
               <AppText style={styles.cardTitle}>Price details</AppText>
               <View style={shop.between}>
                 <AppText style={styles.summaryLabel}>
@@ -417,6 +517,14 @@ export default function CartScreen() {
                   {money(data.subtotal)}
                 </AppText>
               </View>
+              {savings > 0 && (
+                <View style={styles.savingsRow}>
+                  <Ionicons name="pricetags" size={14} color="#15803D" />
+                  <AppText style={styles.savingsText}>
+                    You're saving {money(savings)} on this order
+                  </AppText>
+                </View>
+              )}
             </View>
 
             <View style={styles.trustRow}>
@@ -472,14 +580,41 @@ export default function CartScreen() {
             { paddingBottom: Math.max(12, insets.bottom) },
           ]}
         >
-          <View style={styles.bottomTotal}>
-            <AppText style={styles.bottomAmount}>
-              {money(data.subtotal)}
-            </AppText>
-            <AppText style={styles.bottomCaption}>
-              {savings > 0 ? `Saving ${money(savings)}` : 'Excl. delivery'}
-            </AppText>
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Subtotal ${money(
+              data.subtotal,
+            )}. View price details`}
+            onPress={() =>
+              scrollRef.current?.scrollTo({
+                y: Math.max(0, summaryY - 12),
+                animated: true,
+              })
+            }
+            hitSlop={6}
+            style={styles.bottomTotal}
+          >
+            <View style={styles.bottomAmountRow}>
+              {savings > 0 && (
+                <AppText style={styles.bottomMrp}>
+                  {money(data.mrpSubtotal)}
+                </AppText>
+              )}
+              <AppText style={styles.bottomAmount}>
+                {money(data.subtotal)}
+              </AppText>
+            </View>
+            <View style={styles.bottomLink}>
+              <AppText style={styles.bottomLinkText}>
+                View price details
+              </AppText>
+              <Ionicons
+                name="chevron-up"
+                size={12}
+                color={theme.colors.primary}
+              />
+            </View>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: blocked }}
@@ -636,18 +771,82 @@ const styles = StyleSheet.create({
   },
 
   // Strips and hints
-  savingsStrip: {
+  savingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
+    gap: 6,
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#F0FDF4',
+  },
+  savingsText: {
+    flex: 1,
+    color: '#15803D',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  deliver: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0EFEC',
+  },
+  deliverIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: SOFT,
   },
-  savingsStripText: {
-    color: theme.colors.primary,
+  deliverTitle: { fontSize: 13, lineHeight: 18, color: MUTED },
+  deliverStrong: {
     fontFamily: theme.fonts.semibold,
     fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.text,
+  },
+  deliverLine: { fontSize: 12, lineHeight: 16, color: MUTED },
+  deliverChange: {
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#B2DFDB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliverChangeText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  recs: { gap: 10, marginHorizontal: -16 },
+  recsHead: { paddingHorizontal: 16 },
+  recsSub: { fontSize: 12, lineHeight: 17, color: MUTED },
+  recsRail: { paddingHorizontal: 16, gap: 10 },
+  recsCard: { width: 150 },
+  bottomAmountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  bottomMrp: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  bottomLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  bottomLinkText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+    fontSize: 11,
+    lineHeight: 15,
   },
   hintCard: {
     flexDirection: 'row',
@@ -829,7 +1028,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: theme.colors.text,
   },
-  bottomCaption: { fontSize: 11, color: theme.colors.primary },
   cta: {
     flex: 1,
     flexDirection: 'row',
