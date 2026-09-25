@@ -32,6 +32,7 @@ import {
   clearIdempotencyKey,
   getIdempotencyKey,
   usePlaceOrder,
+  useClearCartOnOrderSuccess,
   useVerifyPayment,
 } from './hooks';
 import { isRazorpayCancelled } from './friendlyReason';
@@ -423,6 +424,10 @@ export default function CheckoutScreen() {
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const placeOrder = usePlaceOrder();
   const verifyPayment = useVerifyPayment();
+  // The backend empties the cart the moment an order is created (whatever
+  // then happens with payment), so drop the cached copy before leaving
+  // checkout — otherwise the badge and cart screen keep showing old items.
+  const refreshCart = useClearCartOnOrderSuccess();
 
   const delivery = data?.shippingAmount ?? 0;
   const couponDiscount = couponResult?.discount ?? 0;
@@ -558,6 +563,7 @@ export default function CheckoutScreen() {
           // cancelled/failure handling in src/app/(main)/checkout/page.tsx.
           const err = razorpayError as Partial<RazorpayError> | undefined;
           const cancelled = isRazorpayCancelled(err);
+          refreshCart();
           router.replace({
             pathname: '/checkout/[status]',
             params: {
@@ -578,6 +584,7 @@ export default function CheckoutScreen() {
             razorpaySignature: payment.razorpay_signature,
           });
           await clearIdempotencyKey(idempotencyMode);
+          refreshCart();
           router.replace({
             pathname: '/checkout/[status]',
             params: {
@@ -589,6 +596,7 @@ export default function CheckoutScreen() {
           });
         } catch (verifyError) {
           setConfirmingPayment(false);
+          refreshCart();
           router.replace({
             pathname: '/checkout/[status]',
             params: {
@@ -601,6 +609,7 @@ export default function CheckoutScreen() {
         }
       } else {
         await clearIdempotencyKey(idempotencyMode);
+        refreshCart();
         router.replace({
           pathname: '/checkout/[status]',
           params: {

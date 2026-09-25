@@ -477,6 +477,12 @@ export default function CheckoutResultScreen() {
   );
 }
 
+      {/* No header on this screen, so give the status bar a solid backdrop —
+          otherwise the scrolled content shows through behind the clock. */}
+      <View
+        pointerEvents="none"
+        style={[styles.statusBarBackdrop, { height: insets.top }]}
+      />
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   alignEnd: { alignItems: 'flex-end' },
@@ -486,6 +492,13 @@ const styles = StyleSheet.create({
 
   badgeWrap: {
     width: 128,
+  statusBarBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#F4F6F8',
+  },
     height: 128,
     alignItems: 'center',
     justifyContent: 'center',
