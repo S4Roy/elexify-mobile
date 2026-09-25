@@ -21,6 +21,7 @@ import { openWebsite } from '../catalog/links';
 import {
   fmtDate,
   fmtDay,
+  fmtDayTime,
   fmtEta,
   fmtTime,
   groupEventsByDay,
@@ -194,7 +195,9 @@ export function MilestoneStepper({
             key={m.key}
             style={styles.stepRow}
             accessible
-            accessibilityLabel={`${m.label}${m.at ? `, ${fmtDay(m.at)}` : ''}${
+            accessibilityLabel={`${m.label}${
+              m.at ? `, ${fmtDayTime(m.at)}` : reached ? '' : ', pending'
+            }${
               m.state === 'current'
                 ? ', current step'
                 : m.state === 'done'
@@ -223,9 +226,13 @@ export function MilestoneStepper({
               >
                 {m.label}
               </AppText>
-              {!!m.at && (
-                <AppText style={styles.stepDate}>{fmtDay(m.at)}</AppText>
-              )}
+              {m.at ? (
+                <AppText style={styles.stepDate}>{fmtDayTime(m.at)}</AppText>
+              ) : !reached ? (
+                <AppText style={[styles.stepDate, styles.stepPending]}>
+                  Pending
+                </AppText>
+              ) : null}
             </View>
           </View>
         );
@@ -234,9 +241,60 @@ export function MilestoneStepper({
   );
 }
 
+type EventLook = {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  color: string;
+  soft: string;
+};
+
+/** Picks an icon and colour from the event's wording, so a refund, a
+ * cancellation and a courier scan are distinguishable at a glance. */
+function eventLook(event: TrackingEvent): EventLook {
+  const t = event.title.toLowerCase();
+  const primary = { color: C.primary, soft: C.primarySoft };
+  const success = { color: C.success, soft: '#DCFCE7' };
+  const danger = { color: C.danger, soft: '#FEE2E2' };
+  const warning = { color: '#D97706', soft: '#FEF3C7' };
+  if (/refund/.test(t)) {
+    return { icon: 'wallet-outline', ...success };
+  }
+  if (/cancellation requested/.test(t)) {
+    return { icon: 'hourglass-outline', ...warning };
+  }
+  if (/cancel|fail|undelivered|rto/.test(t)) {
+    return { icon: 'close', ...danger };
+  }
+  if (/return/.test(t)) {
+    return { icon: 'return-down-back', ...warning };
+  }
+  if (/payment|paid/.test(t)) {
+    return { icon: 'card-outline', ...primary };
+  }
+  if (/out for delivery/.test(t)) {
+    return { icon: 'bicycle-outline', ...primary };
+  }
+  if (/delivered/.test(t)) {
+    return { icon: 'home-outline', ...success };
+  }
+  if (/confirm/.test(t)) {
+    return { icon: 'checkmark', ...primary };
+  }
+  if (/placed/.test(t)) {
+    return { icon: 'bag-check-outline', ...primary };
+  }
+  if (/pack|prepar|process/.test(t)) {
+    return { icon: 'cube-outline', ...primary };
+  }
+  if (event.kind === 'courier' || /ship|transit|pick|dispatch/.test(t)) {
+    return { icon: 'car-outline', ...primary };
+  }
+  return { icon: 'ellipse', ...primary };
+}
+
 /**
- * Full shipment history, newest first, one heading per day. The latest
- * event is emphasised; long logs collapse to the most recent few.
+ * Full history, newest first, one heading per day. Each event gets an icon
+ * for its type on a single continuous rail; the latest is filled in and
+ * long logs collapse to the most recent few.
  */
 export function ActivityLog({
   events,
@@ -251,88 +309,100 @@ export function ActivityLog({
   if (!events.length) {
     return <AppText style={styles.empty}>{emptyText}</AppText>;
   }
-  const visible = expanded ? events : events.slice(0, initialCount);
+  // Don't hide just one or two rows behind a button.
+  const collapsible = events.length > initialCount + 1;
+  const visible =
+    expanded || !collapsible ? events : events.slice(0, initialCount);
   const groups = groupEventsByDay(visible);
   let index = 0;
   return (
     <View>
-      {groups.map(group => (
-        <View key={group.key} style={styles.dayGroup}>
-          <AppText style={styles.dayLabel}>{group.label}</AppText>
-          <View style={styles.dayEvents}>
-            {group.events.map((event, i) => {
-              const isLatest = index++ === 0;
-              const lastInGroup = i === group.events.length - 1;
-              return (
-                <View
-                  key={`${event.at}-${event.title}-${index}`}
-                  style={styles.eventRow}
-                  accessible
-                  accessibilityLabel={`${event.title}${
-                    event.location ? `, ${event.location}` : ''
-                  }, ${fmtTime(event.at)}`}
-                >
-                  <View style={styles.eventRail}>
-                    <View
-                      style={[
-                        styles.eventDot,
-                        isLatest && styles.eventDotLatest,
-                      ]}
+      {groups.map((group, g) => (
+        <View key={group.key}>
+          <View style={styles.dayRow}>
+            <View style={styles.eventRail}>
+              {g > 0 && <View style={styles.eventLine} />}
+            </View>
+            <AppText style={styles.dayLabel}>{group.label}</AppText>
+          </View>
+          {group.events.map(event => {
+            const position = index++;
+            const isLatest = position === 0;
+            const isLast = position === visible.length - 1;
+            const look = eventLook(event);
+            return (
+              <View
+                key={`${event.at}-${event.title}-${position}`}
+                style={styles.eventRow}
+                accessible
+                accessibilityLabel={`${event.title}${
+                  event.location ? `, ${event.location}` : ''
+                }, ${fmtTime(event.at)}${isLatest ? ', latest update' : ''}`}
+              >
+                <View style={styles.eventRail}>
+                  <View
+                    style={[
+                      styles.eventBubble,
+                      {
+                        backgroundColor: isLatest ? look.color : look.soft,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={look.icon}
+                      size={look.icon === 'ellipse' ? 8 : 14}
+                      color={isLatest ? '#FFFFFF' : look.color}
                     />
-                    {!lastInGroup && <View style={styles.eventLine} />}
                   </View>
-                  <View style={styles.eventBody}>
-                    <View style={styles.eventHead}>
+                  {!isLast && <View style={styles.eventLine} />}
+                </View>
+                <View
+                  style={[styles.eventBody, isLast && styles.eventBodyLast]}
+                >
+                  <View style={styles.eventHead}>
+                    <AppText
+                      style={[
+                        styles.eventTitle,
+                        isLatest && styles.eventTitleLatest,
+                      ]}
+                    >
+                      {event.title}
+                    </AppText>
+                    <AppText style={styles.eventTime}>
+                      {fmtTime(event.at)}
+                    </AppText>
+                  </View>
+                  {!!event.location && (
+                    <View style={styles.eventLocation}>
                       <Ionicons
-                        name={
-                          event.kind === 'courier'
-                            ? 'car-outline'
-                            : event.kind === 'order'
-                            ? 'receipt-outline'
-                            : 'cube-outline'
-                        }
-                        size={13}
-                        color={isLatest ? C.primary : C.faint}
-                        style={styles.eventIcon}
+                        name="location-outline"
+                        size={12}
+                        color={C.muted}
                       />
-                      <AppText
-                        style={[
-                          styles.eventTitle,
-                          isLatest && styles.eventTitleLatest,
-                        ]}
-                      >
-                        {event.title}
-                      </AppText>
-                      <AppText style={styles.eventTime}>
-                        {fmtTime(event.at)}
+                      <AppText style={styles.eventLocationText}>
+                        {event.location}
                       </AppText>
                     </View>
-                    {!!event.location && (
-                      <View style={styles.eventLocation}>
-                        <Ionicons
-                          name="location-outline"
-                          size={11}
-                          color={C.muted}
-                        />
-                        <AppText style={styles.eventLocationText}>
-                          {event.location}
-                        </AppText>
-                      </View>
-                    )}
-                  </View>
+                  )}
+                  {isLatest && events.length > 1 && (
+                    <View style={styles.latestChip}>
+                      <AppText style={styles.latestChipText}>
+                        Latest update
+                      </AppText>
+                    </View>
+                  )}
                 </View>
-              );
-            })}
-          </View>
+              </View>
+            );
+          })}
         </View>
       ))}
-      {events.length > initialCount && (
+      {collapsible && (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           onPress={() => setExpanded(v => !v)}
-          style={styles.showAll}
-          hitSlop={8}
+          style={({ pressed }) => [styles.showAll, pressed && styles.pressed]}
         >
           <AppText style={styles.showAllText}>
             {expanded
@@ -592,6 +662,7 @@ export const trackingStyles = StyleSheet.create({
 });
 
 const DOT = 26;
+const EVENT_BUBBLE = 28;
 
 const styles = StyleSheet.create({
   ...trackingStyles,
@@ -656,63 +727,71 @@ const styles = StyleSheet.create({
   stepLabelReached: { fontFamily: theme.fonts.semibold, color: C.text },
   stepLabelUpcoming: { color: C.faint },
   stepDate: { fontSize: 12, color: C.muted, marginTop: 1 },
+  stepPending: { color: C.faint },
 
   // Activity log
   empty: { fontSize: 13, color: C.muted, lineHeight: 19 },
-  dayGroup: { marginBottom: 14 },
+  dayRow: { flexDirection: 'row', gap: 12, minHeight: 28 },
   dayLabel: {
     fontSize: 11,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     fontFamily: theme.fonts.semibold,
     color: C.muted,
-    marginBottom: 8,
+    paddingTop: 2,
+    paddingBottom: 8,
   },
-  dayEvents: { paddingLeft: 2 },
   eventRow: { flexDirection: 'row', gap: 12 },
-  eventRail: { alignItems: 'center', width: 10 },
-  eventDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 5,
-    backgroundColor: '#D1D5DB',
+  eventRail: { alignItems: 'center', width: EVENT_BUBBLE },
+  eventBubble: {
+    width: EVENT_BUBBLE,
+    height: EVENT_BUBBLE,
+    borderRadius: EVENT_BUBBLE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  eventDotLatest: {
-    backgroundColor: C.primary,
-    borderWidth: 3,
-    borderColor: C.primarySoft,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginTop: 3,
-  },
-  eventLine: { width: 1.5, flex: 1, backgroundColor: C.line, marginTop: 3 },
-  eventBody: { flex: 1, paddingBottom: 14 },
-  eventHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  eventIcon: { marginTop: 3 },
-  eventTitle: { flex: 1, fontSize: 13, lineHeight: 19, color: '#374151' },
+  eventLine: { width: 2, flex: 1, borderRadius: 1, backgroundColor: C.line },
+  eventBody: { flex: 1, paddingTop: 4, paddingBottom: 16 },
+  eventBodyLast: { paddingBottom: 4 },
+  eventHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  eventTitle: { flex: 1, fontSize: 14, lineHeight: 20, color: '#4B5563' },
   eventTitleLatest: { fontFamily: theme.fonts.semibold, color: C.text },
   eventTime: {
     fontSize: 12,
-    lineHeight: 19,
+    lineHeight: 20,
     color: C.muted,
     fontVariant: ['tabular-nums'],
   },
   eventLocation: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     marginTop: 2,
-    marginLeft: 19,
   },
-  eventLocationText: { fontSize: 12, color: C.muted },
+  eventLocationText: { flex: 1, fontSize: 12, color: C.muted },
+  latestChip: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: C.primarySoft,
+  },
+  latestChipText: {
+    fontSize: 10,
+    fontFamily: theme.fonts.semibold,
+    color: C.primary,
+    letterSpacing: 0.3,
+  },
   showAll: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
-    alignSelf: 'flex-start',
-    minHeight: 32,
+    minHeight: 40,
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
   },
   showAllText: {
     fontSize: 13,

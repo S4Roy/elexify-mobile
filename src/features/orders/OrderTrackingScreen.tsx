@@ -141,12 +141,22 @@ export default function OrderTrackingScreen() {
             {!!data.activity.length && (
               <View style={trackingStyles.card}>
                 <View style={styles.sectionHead}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={16}
-                    color={theme.colors.primary}
-                  />
-                  <AppText style={styles.sectionTitle}>Order activity</AppText>
+                  <View style={styles.activityIcon}>
+                    <Ionicons
+                      name="time-outline"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <AppText style={styles.sectionTitle}>
+                      Order activity
+                    </AppText>
+                    <AppText style={styles.activityCount}>
+                      {data.activity.length} update
+                      {data.activity.length === 1 ? '' : 's'}
+                    </AppText>
+                  </View>
                 </View>
                 <ActivityLog events={data.activity} initialCount={4} />
               </View>
@@ -167,6 +177,16 @@ export default function OrderTrackingScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  activityIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  activityCount: { fontSize: 12, color: theme.colors.secondary, marginTop: 1 },
   page: { backgroundColor: '#F7F8FA' },
   body: { padding: 16, gap: 14, paddingBottom: 32 },
   headTop: {

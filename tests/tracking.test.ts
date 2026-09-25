@@ -19,6 +19,7 @@ const basePackage: OrderPackage = {
   etd: '26-29 Aug',
   trackingUrl: 'https://track.example/AWB123',
   itemCount: 2,
+  items: [],
   shippedAt: '2026-08-20T10:00:00.000Z',
   deliveredAt: null,
   createdAt: '2026-08-18T10:00:00.000Z',

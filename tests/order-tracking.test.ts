@@ -16,6 +16,11 @@ test('parsePackage reads a fully populated package with its tracking log', () =>
       etd: '26-29 Aug',
       tracking_url: 'https://track.example/AWB123',
       item_count: 2,
+      items: [
+        { order_item_id: 'item-a', quantity: 1 },
+        { order_item_id: 'item-b', quantity: 3 },
+        { quantity: 1 },
+      ],
       shipped_at: '2026-08-20T10:00:00.000Z',
       created_at: '2026-08-18T10:00:00.000Z',
       tracking_events: [
@@ -34,6 +39,10 @@ test('parsePackage reads a fully populated package with its tracking log', () =>
     etd: '26-29 Aug',
     trackingUrl: 'https://track.example/AWB123',
     itemCount: 2,
+    items: [
+      { orderItemId: 'item-a', quantity: 1 },
+      { orderItemId: 'item-b', quantity: 3 },
+    ],
     shippedAt: '2026-08-20T10:00:00.000Z',
     deliveredAt: null,
     createdAt: '2026-08-18T10:00:00.000Z',

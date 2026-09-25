@@ -17,8 +17,10 @@ import {
   type CancelResult,
   type LegacyTracking,
   type OrderDetail,
+  type OrderItem,
   type OrderPackage,
 } from '../../api/order';
+import type { TrackingShipment } from '../../api/tracking';
 import { openWebsite } from '../catalog/links';
 import { isRazorpayCancelled } from '../checkout/friendlyReason';
 import { useVerifyPayment } from '../checkout/hooks';
@@ -29,6 +31,7 @@ import {
   orderStatusColor,
   orderStatusLabel,
   packageStepDate,
+  packageStatusColor,
   packageStepReached,
   paymentStatusColor,
   showsPackageProgress,
@@ -40,7 +43,8 @@ import {
   useOrderTracking,
   useRetryPayment,
 } from './hooks';
-import { TrackingSummaryCard } from './TrackingViews';
+import { ActivityLog, TrackingSummaryCard } from './TrackingViews';
+import { fmtDateTime } from './trackingFormat';
 import { CancelOrderSheet } from './CancelOrderSheet';
 import { PaymentRetryCard } from './PaymentRetryCard';
 import { cancellationOutcome, refundSteps } from './cancellation';
@@ -50,109 +54,239 @@ const RETRY_WINDOW_MS = 60 * 60 * 1000;
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value ?? '';
-const formatDate = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null;
-
-function PackageCard({ pkg }: { pkg: OrderPackage }) {
+function PackageCard({
+  pkg,
+  orderItems,
+  shipment,
+}: {
+  pkg: OrderPackage;
+  orderItems: OrderItem[];
+  /** The tracking API's view of this package, with the full courier log. */
+  shipment?: TrackingShipment;
+}) {
   const [showLog, setShowLog] = useState(false);
   const progress = showsPackageProgress(pkg);
+  const tone = packageStatusColor(pkg.status);
+  const units = pkg.items.reduce((sum, line) => sum + line.quantity, 0);
+  const open = !['cancelled', 'returned', 'delivered'].includes(pkg.status);
   return (
     <View style={styles.packageCard}>
-      <View style={shop.between}>
-        <AppText style={styles.packageTitle}>
-          Package {pkg.packageNumber}
-          {pkg.itemCount
-            ? ` · ${pkg.itemCount} item${pkg.itemCount === 1 ? '' : 's'}`
-            : ''}
-        </AppText>
-        <AppText style={styles.packageStatus}>
-          {PACKAGE_STATUS_LABELS[pkg.status] ?? pkg.status}
-        </AppText>
+      <View style={styles.packageHead}>
+        <View style={styles.packageIcon}>
+          <Ionicons
+            name="cube-outline"
+            size={16}
+            color={theme.colors.primary}
+          />
+        </View>
+        <View style={shop.flex}>
+          <AppText style={styles.packageTitle}>
+            Package {pkg.packageNumber}
+          </AppText>
+          <AppText style={styles.packageMeta}>
+            {pkg.items.length
+              ? `${units} unit${units === 1 ? '' : 's'} · ${
+                  pkg.items.length
+                } product${pkg.items.length === 1 ? '' : 's'}`
+              : pkg.itemCount
+              ? `${pkg.itemCount} item${pkg.itemCount === 1 ? '' : 's'}`
+              : ''}
+            {pkg.referenceId
+              ? `${pkg.items.length || pkg.itemCount ? ' · ' : ''}Ref ${
+                  pkg.referenceId
+                }`
+              : ''}
+          </AppText>
+        </View>
+        <View style={[styles.packageBadge, { backgroundColor: tone.bg }]}>
+          <AppText style={[styles.packageBadgeText, { color: tone.text }]}>
+            {PACKAGE_STATUS_LABELS[pkg.status] ?? pkg.status}
+          </AppText>
+        </View>
       </View>
 
-      {(pkg.courierName || pkg.awb) && (
-        <AppText style={shop.muted}>
-          {[pkg.courierName, pkg.awb ? `AWB: ${pkg.awb}` : null]
-            .filter(Boolean)
-            .join(' · ')}
-        </AppText>
-      )}
-
-      {pkg.status === 'delivered' && pkg.deliveredAt ? (
-        <AppText style={styles.deliveredBanner}>
-          Delivered on {formatDate(pkg.deliveredAt)}
-        </AppText>
-      ) : pkg.etd && !['cancelled', 'returned'].includes(pkg.status) ? (
-        <AppText style={styles.etdBanner}>
-          Estimated delivery: {pkg.etd}
-        </AppText>
-      ) : null}
-
-      {progress && (
-        <View style={styles.steps}>
-          {PACKAGE_STEPS.map(step => {
-            const reached = packageStepReached(pkg, step);
-            const date = formatDate(packageStepDate(pkg, step));
+      {!!pkg.items.length && (
+        <View style={styles.packageItems}>
+          {pkg.items.map(line => {
+            const item = orderItems.find(i => i.id === line.orderItemId);
             return (
-              <View key={step} style={styles.stepRow}>
-                <View
-                  style={[styles.stepDot, reached && styles.stepDotActive]}
+              <View key={line.orderItemId} style={styles.packageItem}>
+                <StoreImage
+                  uri={item?.image}
+                  label={item?.name ?? ''}
+                  style={styles.packageItemImage}
                 />
-                <AppText
-                  style={[styles.stepLabel, reached && styles.stepLabelActive]}
-                >
-                  {PACKAGE_STATUS_LABELS[step]}
+                <AppText style={styles.packageItemName} numberOfLines={2}>
+                  {item?.name || 'Product unavailable'}
                 </AppText>
-                <AppText style={styles.stepDate}>
-                  {date ?? (reached ? '' : 'Pending')}
-                </AppText>
+                <View style={styles.packageQty}>
+                  <AppText style={styles.packageQtyText}>
+                    ×{line.quantity}
+                  </AppText>
+                </View>
               </View>
             );
           })}
         </View>
       )}
 
-      {!!pkg.trackingEvents.length && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setShowLog(v => !v)}
-          style={styles.logToggle}
-        >
-          <AppText style={shop.link}>
-            {showLog ? 'Hide' : 'View'} tracking updates
-          </AppText>
-          <Ionicons
-            name={showLog ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={theme.colors.primary}
-          />
-        </Pressable>
-      )}
-      {showLog && (
-        <View style={styles.log}>
-          {[...pkg.trackingEvents].reverse().map((event, index) => (
-            <AppText key={`${event.status}-${index}`} style={styles.logRow}>
-              <AppText style={styles.logStatus}>
-                {PACKAGE_STATUS_LABELS[event.status] || 'Tracking update'}
+      {(pkg.courierName || pkg.awb || pkg.shiprocketStatus) && (
+        <View style={styles.packageInfo}>
+          {!!pkg.courierName && (
+            <View style={shop.between}>
+              <AppText style={styles.infoLabel}>Courier</AppText>
+              <AppText style={styles.infoValue}>{pkg.courierName}</AppText>
+            </View>
+          )}
+          {!!pkg.awb && (
+            <View style={shop.between}>
+              <AppText style={styles.infoLabel}>AWB</AppText>
+              <AppText selectable style={styles.infoValue}>
+                {pkg.awb}
               </AppText>
-              {event.occurredAt ? `  ${formatDate(event.occurredAt)}` : ''}
-            </AppText>
-          ))}
+            </View>
+          )}
+          {!!pkg.shiprocketStatus && (
+            <View style={shop.between}>
+              <AppText style={styles.infoLabel}>Courier status</AppText>
+              <AppText style={styles.infoValue}>{pkg.shiprocketStatus}</AppText>
+            </View>
+          )}
+          {!!pkg.shiprocketStatusUpdatedAt && (
+            <View style={shop.between}>
+              <AppText style={styles.infoLabel}>Updated</AppText>
+              <AppText style={styles.infoValue}>
+                {fmtDateTime(pkg.shiprocketStatusUpdatedAt)}
+              </AppText>
+            </View>
+          )}
         </View>
+      )}
+
+      {pkg.status === 'delivered' && pkg.deliveredAt ? (
+        <AppText style={[styles.banner, styles.bannerSuccess]}>
+          Delivered on {fmtDateTime(pkg.deliveredAt)}
+        </AppText>
+      ) : pkg.etd && !['cancelled', 'returned'].includes(pkg.status) ? (
+        <AppText style={[styles.banner, styles.bannerPrimary]}>
+          Estimated delivery: {pkg.etd}
+        </AppText>
+      ) : open ? (
+        <AppText style={[styles.banner, styles.bannerMuted]}>
+          Estimated delivery will appear when the courier provides it.
+        </AppText>
+      ) : null}
+
+      {progress && (
+        <View
+          style={styles.steps}
+          accessibilityLabel={`Package ${pkg.packageNumber} delivery progress`}
+        >
+          {PACKAGE_STEPS.map((step, index) => {
+            const reached = packageStepReached(pkg, step);
+            const nextReached =
+              index < PACKAGE_STEPS.length - 1 &&
+              packageStepReached(pkg, PACKAGE_STEPS[index + 1]);
+            const date = packageStepDate(pkg, step);
+            return (
+              <View key={step} style={styles.stepRow}>
+                <View style={styles.stepRail}>
+                  <View
+                    style={[styles.stepDot, reached && styles.stepDotActive]}
+                  />
+                  {index < PACKAGE_STEPS.length - 1 && (
+                    <View
+                      style={[
+                        styles.stepLine,
+                        nextReached && styles.stepLineActive,
+                      ]}
+                    />
+                  )}
+                </View>
+                <View style={styles.stepText}>
+                  <AppText
+                    style={[
+                      styles.stepLabel,
+                      reached && styles.stepLabelActive,
+                    ]}
+                  >
+                    {PACKAGE_STATUS_LABELS[step]}
+                  </AppText>
+                  <AppText style={styles.stepDate}>
+                    {date
+                      ? fmtDateTime(date)
+                      : reached
+                      ? 'Time unavailable'
+                      : 'Pending'}
+                  </AppText>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {shipment ? (
+        <View style={styles.history}>
+          <AppText style={styles.historyLabel}>Tracking history</AppText>
+          <ActivityLog
+            events={shipment.events}
+            initialCount={3}
+            emptyText={
+              pkg.awb
+                ? "The courier hasn't shared any updates yet."
+                : 'Updates will appear once this package is handed to the courier.'
+            }
+          />
+        </View>
+      ) : (
+        !!pkg.trackingEvents.length && (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showLog }}
+              onPress={() => setShowLog(v => !v)}
+              style={styles.logToggle}
+            >
+              <AppText style={shop.link}>
+                {showLog ? 'Hide' : 'View'} package {pkg.packageNumber} tracking
+                updates
+              </AppText>
+              <Ionicons
+                name={showLog ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={theme.colors.primary}
+              />
+            </Pressable>
+            {showLog && (
+              <View style={styles.log}>
+                {[...pkg.trackingEvents].reverse().map((event, index) => (
+                  <AppText
+                    key={`${event.status}-${index}`}
+                    style={styles.logRow}
+                  >
+                    <AppText style={styles.logStatus}>
+                      {PACKAGE_STATUS_LABELS[event.status] || 'Tracking update'}
+                    </AppText>
+                    {event.occurredAt
+                      ? `  ${fmtDateTime(event.occurredAt)}`
+                      : ''}
+                  </AppText>
+                ))}
+              </View>
+            )}
+          </>
+        )
       )}
 
       {pkg.trackingUrl?.startsWith('https://') ? (
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole="link"
           onPress={() => openWebsite(pkg.trackingUrl!)}
-          style={styles.trackButton}
+          style={({ pressed }) => [
+            styles.trackButton,
+            pressed && styles.pressed,
+          ]}
         >
           <Ionicons
             name="navigate-outline"
@@ -161,7 +295,7 @@ function PackageCard({ pkg }: { pkg: OrderPackage }) {
           />
           <AppText style={shop.link}>Track package {pkg.packageNumber}</AppText>
         </Pressable>
-      ) : !['cancelled', 'returned', 'delivered'].includes(pkg.status) ? (
+      ) : open ? (
         <AppText style={styles.trackingUnavailable}>
           {pkg.awb
             ? 'Live tracking link will appear when the courier provides it.'
@@ -188,24 +322,13 @@ function LegacyTrackingCard({ tracking }: { tracking: LegacyTracking }) {
         </AppText>
       )}
       {tracking.etd && (
-        <AppText style={styles.etdBanner}>
+        <AppText style={[styles.banner, styles.bannerPrimary]}>
           Estimated delivery: {tracking.etd}
         </AppText>
       )}
     </View>
   );
 }
-
-const fmtDateTime = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null;
 
 /** Why and when the order was cancelled, plus refund progress when a
  * captured payment is being returned. */
@@ -487,7 +610,7 @@ export default function OrderDetailScreen() {
                   : data.isPartialCod
                   ? 'Partial Cash on Delivery'
                   : 'Cash on Delivery'}{' '}
-                · Placed on {formatDate(data.createdAt)}
+                · Placed on {fmtDateTime(data.createdAt)}
               </AppText>
               {canDownloadInvoice(data) && (
                 <Pressable
@@ -534,7 +657,7 @@ export default function OrderDetailScreen() {
 
             {data.cancelled && <CancellationCard order={data} />}
 
-            {tracking.data ? (
+            {!!tracking.data && (
               <TrackingSummaryCard
                 data={tracking.data}
                 onOpen={() =>
@@ -544,20 +667,38 @@ export default function OrderDetailScreen() {
                   })
                 }
               />
-            ) : (
-              // Fallback while tracking is loading or unavailable: the
-              // package status straight from the order payload.
-              (!!data.packages.length || data.legacyTracking) && (
-                <View style={styles.section}>
-                  <AppText style={shop.heading}>Packages & Tracking</AppText>
-                  {data.packages.map(pkg => (
-                    <PackageCard key={pkg.packageNumber} pkg={pkg} />
-                  ))}
-                  {!data.packages.length && data.legacyTracking && (
-                    <LegacyTrackingCard tracking={data.legacyTracking} />
+            )}
+
+            {/* One card per package, as on the website — shown alongside the
+                tracking summary, not only while it loads. */}
+            {(!!data.packages.length || data.legacyTracking) && (
+              <View style={styles.section}>
+                <View style={shop.between}>
+                  <AppText style={shop.heading}>
+                    {data.packages.length > 1
+                      ? 'Packages & Tracking'
+                      : 'Shipment Tracking'}
+                  </AppText>
+                  {data.packages.length > 1 && (
+                    <AppText style={shop.muted}>
+                      {data.packages.length} shipments
+                    </AppText>
                   )}
                 </View>
-              )
+                {data.packages.map(pkg => (
+                  <PackageCard
+                    key={pkg.packageNumber}
+                    pkg={pkg}
+                    orderItems={data.items}
+                    shipment={tracking.data?.shipments.find(
+                      s => s.packageNumber === pkg.packageNumber,
+                    )}
+                  />
+                ))}
+                {!data.packages.length && data.legacyTracking && (
+                  <LegacyTrackingCard tracking={data.legacyTracking} />
+                )}
+              </View>
             )}
 
             <View style={styles.section}>
@@ -912,37 +1053,132 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 6,
   },
+  pressed: { opacity: 0.6 },
   packageCard: {
-    gap: 6,
+    gap: 12,
     padding: 14,
     borderRadius: theme.radius.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
   },
-  packageTitle: { fontFamily: theme.fonts.medium, fontSize: 14 },
-  packageStatus: {
-    fontFamily: theme.fonts.semibold,
+  packageHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  packageIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  packageTitle: { fontFamily: theme.fonts.semibold, fontSize: 14 },
+  packageMeta: { fontSize: 11, color: theme.colors.secondary, marginTop: 1 },
+  packageBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
+  packageBadgeText: { fontSize: 11, fontFamily: theme.fonts.semibold },
+  packageItems: {
+    gap: 10,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  packageItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  packageItemImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  packageItemName: { flex: 1, fontSize: 13, lineHeight: 18, color: '#374151' },
+  packageQty: {
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  packageQtyText: {
     fontSize: 12,
-    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+    color: '#374151',
   },
-  deliveredBanner: {
+  packageInfo: {
+    gap: 6,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+  },
+  infoLabel: { fontSize: 12, color: theme.colors.secondary },
+  infoValue: {
+    flexShrink: 1,
+    textAlign: 'right',
+    fontSize: 12,
+    fontFamily: theme.fonts.medium,
+    color: theme.colors.text,
+  },
+  banner: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 12,
+    overflow: 'hidden',
+  },
+  bannerSuccess: {
+    backgroundColor: '#F0FDF4',
+    color: '#15803D',
+    fontFamily: theme.fonts.medium,
+  },
+  bannerPrimary: {
+    backgroundColor: theme.colors.primaryLight,
     color: theme.colors.primary,
     fontFamily: theme.fonts.medium,
-    fontSize: 13,
   },
-  etdBanner: { color: theme.colors.primary, fontSize: 13 },
-  steps: { marginTop: 8, gap: 8 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bannerMuted: { backgroundColor: '#F9FAFB', color: theme.colors.secondary },
+  steps: { paddingTop: 2 },
+  stepRow: { flexDirection: 'row', gap: 10 },
+  stepRail: { alignItems: 'center', width: 10 },
   stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
     backgroundColor: theme.colors.border,
   },
   stepDotActive: { backgroundColor: theme.colors.primary },
-  stepLabel: { flex: 1, fontSize: 12, color: theme.colors.secondary },
+  stepLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 16,
+    marginVertical: 2,
+    borderRadius: 1,
+    backgroundColor: theme.colors.border,
+  },
+  stepLineActive: { backgroundColor: '#80BCB4' },
+  stepText: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    columnGap: 8,
+    paddingBottom: 12,
+  },
+  stepLabel: { fontSize: 13, color: '#9CA3AF' },
   stepLabelActive: { color: theme.colors.text, fontFamily: theme.fonts.medium },
-  stepDate: { fontSize: 11, color: theme.colors.secondary },
+  stepDate: { fontSize: 12, color: theme.colors.secondary },
+  history: {
+    gap: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#FBFCFC',
+    padding: 12,
+  },
+  historyLabel: {
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontFamily: theme.fonts.semibold,
+    color: theme.colors.secondary,
+  },
   logToggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -961,8 +1197,12 @@ const styles = StyleSheet.create({
   trackButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    marginTop: 4,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#B2DFDB',
   },
   trackingUnavailable: {
     fontSize: 12,

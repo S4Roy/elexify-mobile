@@ -24,6 +24,17 @@ export const PACKAGE_STATUS_LABELS: Record<string, string> = {
   failed: 'Preparing',
 };
 
+// Mirrors the web's PACKAGE_STATUS_STYLES.
+const PACKAGE_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  packed: { bg: '#DBEAFE', text: '#1D4ED8' },
+  shipped: { bg: '#E0E7FF', text: '#4338CA' },
+  out_for_delivery: { bg: '#E0E7FF', text: '#4338CA' },
+  delivered: { bg: '#DCFCE7', text: '#15803D' },
+  failed: { bg: '#FEF9C3', text: '#A16207' },
+};
+export const packageStatusColor = (status: string) =>
+  PACKAGE_STATUS_COLORS[status] ?? { bg: '#F3F4F6', text: '#4B5563' };
+
 export function packageStepDate(
   pkg: OrderPackage,
   step: string,

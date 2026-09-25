@@ -54,6 +54,18 @@ export const fmtTime = (v?: string | null) => {
   return d ? format(d, 'time', { hour: 'numeric', minute: '2-digit' }) : '';
 };
 
+/** "25 Sept 2026, 6:47 pm" — the full timestamp the website shows. */
+export const fmtDateTime = (v?: string | null) => {
+  const d = valid(v);
+  return d ? `${fmtDate(v)}, ${fmtTime(v)}` : '';
+};
+
+/** "Fri, 25 Sept · 6:47 pm" */
+export const fmtDayTime = (v?: string | null) => {
+  const d = valid(v);
+  return d ? `${fmtDay(v)} · ${fmtTime(v)}` : '';
+};
+
 /** Grouping key for "one heading per day" logs (YYYY-MM-DD in IST). */
 export const dayKey = (v?: string | null) => {
   const d = valid(v);

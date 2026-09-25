@@ -194,6 +194,11 @@ export type PackageTrackingEvent = {
   occurredAt: string | null;
 };
 
+export type PackageLine = {
+  orderItemId: string;
+  quantity: number;
+};
+
 export type OrderPackage = {
   packageNumber: number;
   referenceId: string | null;
@@ -205,6 +210,8 @@ export type OrderPackage = {
   etd: string | null;
   trackingUrl: string | null;
   itemCount: number;
+  /** Which order items (and how many of each) went into this package. */
+  items: PackageLine[];
   shippedAt: string | null;
   deliveredAt: string | null;
   createdAt: string | null;
@@ -326,6 +333,17 @@ export function parsePackage(value: unknown): OrderPackage | null {
     etd: string(p.etd) || null,
     trackingUrl: string(p.tracking_url) || null,
     itemCount: number(p.item_count) ?? 0,
+    items: Array.isArray(p.items)
+      ? p.items
+          .map(line => {
+            const l = record(line);
+            return {
+              orderItemId: string(l.order_item_id),
+              quantity: number(l.quantity) ?? 0,
+            };
+          })
+          .filter(line => !!line.orderItemId)
+      : [],
     shippedAt: string(p.shipped_at) || null,
     deliveredAt: string(p.delivered_at) || null,
     createdAt: string(p.created_at) || null,
