@@ -106,7 +106,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 999,
+    // No zIndex: the splash is rendered last in the root layout, so it
+    // already draws on top. On Android a zIndexed child crashes the parent
+    // ("getChildDrawingOrder() returned invalid index") when the splash
+    // unmounts and the sibling count drops.
   },
   badge: {
     width: 112,

@@ -4,6 +4,7 @@ import {
   Easing,
   Image,
   Modal,
+  Platform,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -29,8 +30,12 @@ export const shop = StyleSheet.create({
   flex: { flex: 1 },
   searchLabel: { flex: 1, color: theme.colors.secondary },
   header: { backgroundColor: '#FFFFFF' },
-  // Keeps the header (and its shadow) drawn above the feed that follows it.
-  headerRaised: { zIndex: 2 },
+  // Keeps the header's shadow drawn above the feed that follows it. iOS only:
+  // on Android, zIndex on a child whose parent later gains/loses a child
+  // (e.g. a BottomSheet Modal mounting next to it) crashes with
+  // "getChildDrawingOrder() returned invalid index"; the hairline divider
+  // still marks the sticky edge there.
+  headerRaised: Platform.OS === 'ios' ? { zIndex: 2 } : {},
   headerShadow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#FFFFFF',
@@ -385,7 +390,12 @@ export const shop = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  stickyBar: { backgroundColor: '#FFFFFF', zIndex: 1 },
+  // zIndex on iOS only — see headerRaised. Android stacks it via the
+  // elevation ScrollShadow animates.
+  stickyBar: {
+    backgroundColor: '#FFFFFF',
+    ...(Platform.OS === 'ios' ? { zIndex: 1 } : {}),
+  },
   skeletonBlock: { borderRadius: 6, backgroundColor: '#D6DAE0' },
   skeletonImage: { backgroundColor: '#D6DAE0' },
   skeletonLineNarrow: { height: 11, width: '35%', marginTop: 2 },
