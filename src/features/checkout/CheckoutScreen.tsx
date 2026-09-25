@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -163,12 +163,14 @@ function StepHeading({
   title,
   done = false,
   aside,
+  action,
 }: {
   step: number;
   title: string;
   /** Step completed — the number turns into a tick. */
   done?: boolean;
   aside?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <View style={styles.stepHeading}>
@@ -181,6 +183,7 @@ function StepHeading({
       </View>
       <AppText style={styles.stepTitle}>{title}</AppText>
       {!!aside && <AppText style={styles.stepAside}>{aside}</AppText>}
+      {action}
     </View>
   );
 }
@@ -225,6 +228,82 @@ function AddAddressTile({
       </View>
       <Ionicons name="chevron-forward" size={18} color={theme.colors.primary} />
     </Pressable>
+  );
+}
+
+/** Flipkart/Amazon-style progress: Cart → Address → Payment. */
+function CheckoutProgress({ addressDone }: { addressDone: boolean }) {
+  const steps = [
+    { label: 'Cart', state: 'done' as const },
+    {
+      label: 'Address',
+      state: addressDone ? ('done' as const) : ('current' as const),
+    },
+    {
+      label: 'Payment',
+      state: addressDone ? ('current' as const) : ('todo' as const),
+    },
+  ];
+  return (
+    <View
+      style={styles.progress}
+      accessible
+      accessibilityLabel={`Checkout progress: ${steps
+        .map(
+          s =>
+            `${s.label} ${
+              s.state === 'done'
+                ? 'done'
+                : s.state === 'current'
+                ? 'current step'
+                : 'next'
+            }`,
+        )
+        .join(', ')}`}
+    >
+      {steps.map((step, i) => (
+        <React.Fragment key={step.label}>
+          {i > 0 && (
+            <View
+              style={[
+                styles.progressLine,
+                step.state !== 'todo' && styles.progressLineOn,
+              ]}
+            />
+          )}
+          <View style={styles.progressStep}>
+            <View
+              style={[
+                styles.progressDot,
+                step.state === 'done' && styles.progressDotDone,
+                step.state === 'current' && styles.progressDotCurrent,
+              ]}
+            >
+              {step.state === 'done' ? (
+                <Ionicons name="checkmark" size={11} color="#FFFFFF" />
+              ) : (
+                <AppText
+                  style={[
+                    styles.progressNum,
+                    step.state === 'current' && styles.progressNumCurrent,
+                  ]}
+                >
+                  {i + 1}
+                </AppText>
+              )}
+            </View>
+            <AppText
+              style={[
+                styles.progressLabel,
+                step.state !== 'todo' && styles.progressLabelOn,
+              ]}
+            >
+              {step.label}
+            </AppText>
+          </View>
+        </React.Fragment>
+      ))}
+    </View>
   );
 }
 
@@ -600,6 +679,10 @@ export default function CheckoutScreen() {
 
   const insets = useSafeAreaInsets();
   const [showAllItems, setShowAllItems] = useState(false);
+  // With an address chosen, only that one is shown; "Change" opens the list.
+  const [pickingAddress, setPickingAddress] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const [summaryY, setSummaryY] = useState(0);
 
   if (addresses.isPending) {
     return (
@@ -625,19 +708,11 @@ export default function CheckoutScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.secureStrip}>
-            <Ionicons
-              name="lock-closed"
-              size={12}
-              color={theme.colors.primary}
-            />
-            <AppText style={styles.secureStripText}>
-              Secure checkout · Your details are encrypted
-            </AppText>
-          </View>
+          <CheckoutProgress addressDone={!!selectedAddress} />
 
           {!mobileVerified && (
             <View style={styles.warningBanner}>
@@ -658,6 +733,29 @@ export default function CheckoutScreen() {
               step={1}
               title="Delivery address"
               done={!!selectedAddress}
+              action={
+                selectedAddress && !noAddresses ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: pickingAddress }}
+                    accessibilityLabel={
+                      pickingAddress
+                        ? 'Done choosing address'
+                        : 'Change delivery address'
+                    }
+                    onPress={() => setPickingAddress(v => !v)}
+                    hitSlop={8}
+                    style={({ pressed }) => [
+                      styles.changeButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <AppText style={styles.changeText}>
+                      {pickingAddress ? 'Done' : 'Change'}
+                    </AppText>
+                  </Pressable>
+                ) : null
+              }
             />
             <QueryState
               pending={addresses.isPending}
@@ -667,29 +765,33 @@ export default function CheckoutScreen() {
               }}
             />
             {noAddresses ? (
-              <AddAddressTile
-                prominent
-                onPress={() => openAddressForm()}
-              />
+              <AddAddressTile prominent onPress={() => openAddressForm()} />
             ) : (
               <>
                 <View style={styles.addressList}>
-                  {addresses.data?.items.map(address => (
+                  {(pickingAddress || !selectedAddress
+                    ? addresses.data?.items
+                    : [selectedAddress]
+                  )?.map(address => (
                     <AddressCard
                       key={address.id}
                       address={address}
                       selected={address.id === addressId}
-                      onSelect={() => setAddressId(address.id)}
+                      onSelect={() => {
+                        setAddressId(address.id);
+                        setPickingAddress(false);
+                      }}
                       onEdit={() => openAddressForm(address.id)}
                     />
                   ))}
                 </View>
-                {!!addresses.data?.items.length && (
-                  <AddAddressTile
-                    prominent={false}
-                    onPress={() => openAddressForm()}
-                  />
-                )}
+                {!!addresses.data?.items.length &&
+                  (pickingAddress || !selectedAddress) && (
+                    <AddAddressTile
+                      prominent={false}
+                      onPress={() => openAddressForm()}
+                    />
+                  )}
               </>
             )}
             {selectedAddress && (
@@ -875,7 +977,10 @@ export default function CheckoutScreen() {
                 )}
               </View>
 
-              <View style={styles.card}>
+              <View
+                style={styles.card}
+                onLayout={e => setSummaryY(e.nativeEvent.layout.y)}
+              >
                 <AppText style={styles.cardTitle}>Price details</AppText>
                 <View style={shop.between}>
                   <AppText style={styles.summaryLabel}>
@@ -1031,13 +1136,29 @@ export default function CheckoutScreen() {
                 <AppText style={styles.bottomAmount}>
                   {recalculating ? '…' : money(payNow)}
                 </AppText>
-                <AppText numberOfLines={2} style={styles.bottomCaption}>
-                  {isPartialCod
-                    ? `+ ${money(codBalance)} on delivery`
-                    : totalSavings > 0
-                    ? `Saving ${money(totalSavings)}`
-                    : 'Total payable'}
-                </AppText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="View price details"
+                  onPress={() =>
+                    scrollRef.current?.scrollTo({
+                      y: Math.max(0, summaryY - 12),
+                      animated: true,
+                    })
+                  }
+                  hitSlop={8}
+                  style={styles.detailsLink}
+                >
+                  <AppText numberOfLines={1} style={styles.bottomCaption}>
+                    {isPartialCod
+                      ? `+ ${money(codBalance)} on delivery`
+                      : 'View details'}
+                  </AppText>
+                  <Ionicons
+                    name="chevron-up"
+                    size={12}
+                    color={theme.colors.primary}
+                  />
+                </Pressable>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -1128,13 +1249,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
   },
-  secureStrip: {
+  progress: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  progressStep: { alignItems: 'center', gap: 4, width: 64 },
+  progressDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
   },
-  secureStripText: { fontSize: 12, color: MUTED },
+  progressDotDone: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  progressDotCurrent: { borderColor: theme.colors.primary },
+  progressNum: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#9CA3AF',
+  },
+  progressNumCurrent: { color: theme.colors.primary },
+  progressLabel: { fontSize: 11, lineHeight: 15, color: '#9CA3AF' },
+  progressLabelOn: { color: theme.colors.text, fontFamily: theme.fonts.medium },
+  progressLine: {
+    flex: 1,
+    height: 2,
+    marginTop: 10,
+    borderRadius: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  progressLineOn: { backgroundColor: theme.colors.primary },
+  changeButton: {
+    marginLeft: 'auto',
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#B2DFDB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changeText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  detailsLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 
   // Steps
   stepHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
