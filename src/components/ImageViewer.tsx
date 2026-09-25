@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useWindowInsets } from './NavigationBarInset';
 import {
   ActivityIndicator,
   Image,
@@ -27,7 +28,6 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from './ui';
 import { theme } from '../theme';
 
@@ -67,7 +67,7 @@ export function ImageViewer({
   onClose: (index: number) => void;
 }) {
   const window = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const insets = useWindowInsets();
   const count = images.length;
   const startIndex = clamp(initialIndex, 0, Math.max(0, count - 1));
   const [size, setSize] = useState<Size>({ w: window.width, h: window.height });

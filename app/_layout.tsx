@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProviders } from '../src/providers/AppProviders';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
+import { NavigationBarInset } from '../src/components/NavigationBarInset';
 import { useSession } from '../src/stores/session';
 export { ErrorBoundary } from 'expo-router';
 
@@ -36,7 +37,9 @@ export default function RootLayout() {
       {loaded && (
         <AppProviders>
           <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <NavigationBarInset>
+            <Stack screenOptions={{ headerShown: false }} />
+          </NavigationBarInset>
           <PushProvider />
         </AppProviders>
       )}
