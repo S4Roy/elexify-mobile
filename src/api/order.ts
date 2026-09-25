@@ -229,6 +229,25 @@ export type ReturnPolicy = {
   reasons: string[];
 };
 
+export type RefundStatus = 'processing' | 'processed' | 'failed';
+
+/** Set once the order has been cancelled (by the customer or the store). */
+export type CancellationRecord = {
+  reason: string | null;
+  comment: string | null;
+  cancelledAt: string | null;
+  cancelledBy: 'customer' | 'admin' | null;
+};
+
+/** Refund of a captured online payment / Partial COD advance; absent when
+ * none was due (backend status "not_required"). */
+export type RefundRecord = {
+  status: RefundStatus;
+  amount: number | null;
+  initiatedAt: string | null;
+  completedAt: string | null;
+};
+
 export type OrderDetail = OrderSummary & {
   items: OrderItem[];
   shipping: number | null;
@@ -242,7 +261,42 @@ export type OrderDetail = OrderSummary & {
   packages: OrderPackage[];
   legacyTracking: LegacyTracking | null;
   invoiceGenerated: boolean;
+  cancelled: CancellationRecord | null;
+  refund: RefundRecord | null;
 };
+
+export function parseCancellation(value: unknown): CancellationRecord | null {
+  const c = record(value);
+  const cancelledAt = string(c.cancelled_at) || null;
+  if (!cancelledAt) {
+    return null;
+  }
+  const by = string(c.cancelled_by);
+  return {
+    reason: string(c.reason) || null,
+    comment: string(c.comment) || null,
+    cancelledAt,
+    cancelledBy: by === 'customer' || by === 'admin' ? by : null,
+  };
+}
+
+export function parseRefund(value: unknown): RefundRecord | null {
+  const r = record(value);
+  const status = string(r.status);
+  if (
+    status !== 'processing' &&
+    status !== 'processed' &&
+    status !== 'failed'
+  ) {
+    return null;
+  }
+  return {
+    status,
+    amount: number(r.amount),
+    initiatedAt: string(r.initiated_at) || string(r.attempted_at) || null,
+    completedAt: string(r.completed_at) || null,
+  };
+}
 
 function parseTrackingEvent(value: unknown): PackageTrackingEvent {
   const e = record(value);
@@ -289,16 +343,28 @@ export const CANCELLATION_REASONS = [
   'Other',
 ] as const;
 
+export type CancelResult = {
+  orderStatus: string;
+  paymentStatus: string;
+  refund: RefundRecord | null;
+};
+
 export async function cancelOrder(params: {
   orderId: string;
   reason: string;
   comment?: string;
-}): Promise<void> {
-  await api.post('site/inventory/order/cancel', {
+}): Promise<CancelResult> {
+  const res = await api.post('site/inventory/order/cancel', {
     order_id: params.orderId,
     reason: params.reason,
     ...(params.comment ? { comment: params.comment } : {}),
   });
+  const d = record(res.data?.data);
+  return {
+    orderStatus: string(d.order_status) || 'cancelled',
+    paymentStatus: string(d.payment_status),
+    refund: parseRefund(d.refund),
+  };
 }
 
 export async function fetchOrderDetail(
@@ -383,6 +449,8 @@ export async function fetchOrderDetail(
     packages,
     legacyTracking,
     invoiceGenerated: invoice.generated === true,
+    cancelled: parseCancellation(o.cancellation),
+    refund: parseRefund(o.refund),
   };
 }
 

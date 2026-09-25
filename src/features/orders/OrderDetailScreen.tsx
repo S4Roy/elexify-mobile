@@ -1,17 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import RazorpayCheckout, { RazorpayError } from 'react-native-razorpay';
 import { AppText, Button, Feedback } from '../../components/ui';
 import {
-  Chip,
   OrderDetailSkeleton,
   ShopHeader,
   StoreImage,
@@ -21,8 +14,9 @@ import {
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import {
-  CANCELLATION_REASONS,
+  type CancelResult,
   type LegacyTracking,
+  type OrderDetail,
   type OrderPackage,
 } from '../../api/order';
 import { openWebsite } from '../catalog/links';
@@ -40,7 +34,6 @@ import {
   showsPackageProgress,
 } from './tracking';
 import {
-  useCancelOrder,
   useDownloadInvoice,
   useMaybePromptReview,
   useOrderDetail,
@@ -48,6 +41,8 @@ import {
   useRetryPayment,
 } from './hooks';
 import { TrackingSummaryCard } from './TrackingViews';
+import { CancelOrderSheet } from './CancelOrderSheet';
+import { cancellationOutcome, refundSteps } from './cancellation';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
 
 const RETRY_WINDOW_MS = 60 * 60 * 1000;
@@ -200,6 +195,95 @@ function LegacyTrackingCard({ tracking }: { tracking: LegacyTracking }) {
   );
 }
 
+const fmtDateTime = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
+/** Why and when the order was cancelled, plus refund progress when a
+ * captured payment is being returned. */
+function CancellationCard({ order }: { order: OrderDetail }) {
+  const c = order.cancelled!;
+  const steps = order.refund ? refundSteps(order.refund) : [];
+  return (
+    <View style={[styles.section, styles.cancelCard]}>
+      <View style={styles.cancelHead}>
+        <View style={styles.cancelIcon}>
+          <Ionicons name="close" size={16} color="#FFFFFF" />
+        </View>
+        <View style={shop.flex}>
+          <AppText style={styles.cancelTitle}>
+            {c.cancelledBy === 'admin'
+              ? 'Cancelled by Elexify'
+              : 'You cancelled this order'}
+          </AppText>
+          {!!c.cancelledAt && (
+            <AppText style={shop.muted}>{fmtDateTime(c.cancelledAt)}</AppText>
+          )}
+        </View>
+      </View>
+      {!!c.reason && (
+        <AppText style={styles.cancelReason}>
+          Reason: {c.reason}
+          {c.comment ? ` — ${c.comment}` : ''}
+        </AppText>
+      )}
+      {!!order.refund && (
+        <View style={styles.refundBox}>
+          <View style={shop.between}>
+            <AppText style={styles.refundTitle}>Refund</AppText>
+            {order.refund.amount !== null && (
+              <AppText style={styles.refundTitle}>
+                {money(order.refund.amount)}
+              </AppText>
+            )}
+          </View>
+          {steps.map(step => (
+            <View key={step.key} style={styles.refundStep}>
+              <Ionicons
+                name={
+                  step.state === 'failed'
+                    ? 'alert-circle'
+                    : step.state === 'current'
+                    ? 'time-outline'
+                    : 'checkmark-circle'
+                }
+                size={16}
+                color={
+                  step.state === 'failed'
+                    ? '#B45309'
+                    : step.state === 'current'
+                    ? theme.colors.secondary
+                    : theme.colors.primary
+                }
+              />
+              <AppText style={styles.refundLabel}>{step.label}</AppText>
+              {!!step.at && (
+                <AppText style={styles.refundDate}>
+                  {fmtDateTime(step.at)}
+                </AppText>
+              )}
+            </View>
+          ))}
+          <AppText style={styles.refundNote}>
+            {order.refund.status === 'failed'
+              ? "We couldn't start your refund automatically — our team will process it manually."
+              : order.refund.status === 'processing'
+              ? 'Refunds reach your original payment method in 5–7 working days.'
+              : 'The amount has been returned to your original payment method.'}
+          </AppText>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function OrderDetailScreen() {
   const route = useLocalSearchParams<{ id: string }>();
   const id = first(route.id);
@@ -207,15 +291,12 @@ export default function OrderDetailScreen() {
   const data = order.data;
   const tracking = useOrderTracking(id);
   useMaybePromptReview(data?.orderStatus);
-  const cancelOrder = useCancelOrder(id);
   const downloadInvoice = useDownloadInvoice(data?.orderNumber ?? '');
   const [cancelling, setCancelling] = useState(false);
-  const [reason, setReason] = useState('');
-  const [comment, setComment] = useState('');
+  const [cancelOutcome, setCancelOutcome] = useState<ReturnType<
+    typeof cancellationOutcome
+  > | null>(null);
   const [returning, setReturning] = useState(false);
-  const needsComment = reason === 'Other';
-  const canConfirmCancel =
-    !!reason && (!needsComment || comment.trim().length > 0);
 
   // Ticks so the retry-window gate (canRetryPayment below) flips off live
   // once the hour elapses, instead of only re-checking on the next refetch.
@@ -331,6 +412,44 @@ export default function OrderDetailScreen() {
         )}
         {data && (
           <>
+            {cancelOutcome && (
+              <View
+                accessibilityRole="alert"
+                style={[
+                  styles.outcome,
+                  cancelOutcome.tone === 'warning' && styles.outcomeWarning,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    cancelOutcome.tone === 'warning'
+                      ? 'alert-circle'
+                      : 'checkmark-circle'
+                  }
+                  size={18}
+                  color={
+                    cancelOutcome.tone === 'warning'
+                      ? '#B45309'
+                      : theme.colors.primary
+                  }
+                />
+                <AppText style={styles.outcomeText}>
+                  {cancelOutcome.message}
+                </AppText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss"
+                  hitSlop={10}
+                  onPress={() => setCancelOutcome(null)}
+                >
+                  <Ionicons
+                    name="close"
+                    size={16}
+                    color={theme.colors.secondary}
+                  />
+                </Pressable>
+              </View>
+            )}
             <View style={styles.section}>
               <View style={styles.statusPillRow}>
                 <View
@@ -425,6 +544,8 @@ export default function OrderDetailScreen() {
                 </AppText>
               )}
             </View>
+
+            {data.cancelled && <CancellationCard order={data} />}
 
             {tracking.data ? (
               <TrackingSummaryCard
@@ -588,74 +709,43 @@ export default function OrderDetailScreen() {
                 onPress={() => setReturning(true)}
               />
             )}
-            {data.cancellation.allowed && !cancelling && (
-              <Button
-                label="Cancel order"
+            {data.cancellation.allowed && !data.cancelled && (
+              <Pressable
+                accessibilityRole="button"
                 onPress={() => setCancelling(true)}
-              />
-            )}
-            {!data.cancellation.allowed && !!data.cancellation.reason && (
-              <AppText style={shop.muted}>{data.cancellation.reason}</AppText>
-            )}
-            {cancelling && (
-              <View style={styles.section}>
-                <AppText style={shop.heading}>Why are you cancelling?</AppText>
-                <View style={styles.wrap}>
-                  {CANCELLATION_REASONS.map(option => (
-                    <Chip
-                      key={option}
-                      label={option}
-                      selected={reason === option}
-                      onPress={() => setReason(option)}
-                    />
-                  ))}
-                </View>
-                {needsComment && (
-                  <TextInput
-                    accessibilityLabel="Tell us more"
-                    value={comment}
-                    onChangeText={setComment}
-                    placeholder="Tell us more"
-                    placeholderTextColor={theme.colors.secondary}
-                    style={styles.input}
-                  />
-                )}
-                {cancelOrder.isError && (
-                  <AppText style={styles.error}>
-                    {cancelOrder.error.message}
-                  </AppText>
-                )}
-                <Button
-                  label={
-                    cancelOrder.isPending
-                      ? 'Cancelling…'
-                      : 'Confirm cancellation'
-                  }
-                  disabled={!canConfirmCancel || cancelOrder.isPending}
-                  onPress={() => {
-                    cancelOrder.mutate(
-                      {
-                        reason,
-                        comment: needsComment ? comment.trim() : undefined,
-                      },
-                      { onSuccess: () => setCancelling(false) },
-                    );
-                  }}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.cancelButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={18}
+                  color={theme.colors.danger}
                 />
-                <AppText
-                  accessibilityRole="button"
-                  onPress={() => setCancelling(false)}
-                  style={shop.link}
-                >
-                  Never mind
-                </AppText>
-              </View>
+                <AppText style={styles.cancelButtonText}>Cancel order</AppText>
+              </Pressable>
             )}
+            {!data.cancellation.allowed &&
+              !data.cancelled &&
+              !!data.cancellation.reason && (
+                <AppText style={shop.muted}>{data.cancellation.reason}</AppText>
+              )}
           </>
         )}
       </ScrollView>
       {returning && data && (
         <ReturnRequestSheet order={data} onClose={() => setReturning(false)} />
+      )}
+      {cancelling && data && (
+        <CancelOrderSheet
+          order={data}
+          onClose={() => setCancelling(false)}
+          onCancelled={(result: CancelResult) => {
+            setCancelOutcome(cancellationOutcome(data, result));
+            tracking.refetch().catch(() => undefined);
+          }}
+        />
       )}
     </View>
   );
@@ -764,6 +854,71 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   error: { color: theme.colors.danger },
+  outcome: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    borderRadius: theme.radius.card,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  outcomeWarning: { backgroundColor: '#FFFBEB' },
+  outcomeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.text,
+  },
+  cancelCard: { borderColor: '#FECACA', backgroundColor: '#FFFBFB' },
+  cancelHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cancelIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.danger,
+  },
+  cancelTitle: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 15,
+    color: theme.colors.text,
+  },
+  cancelReason: { fontSize: 13, lineHeight: 19, color: '#4B5563' },
+  refundBox: {
+    gap: 8,
+    marginTop: 4,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  refundTitle: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  refundStep: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refundLabel: { flex: 1, fontSize: 13, color: theme.colors.text },
+  refundDate: { fontSize: 11, color: theme.colors.secondary },
+  refundNote: { fontSize: 12, lineHeight: 17, color: theme.colors.secondary },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
+    borderRadius: theme.radius.button,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+  },
+  cancelButtonPressed: { backgroundColor: '#FEF2F2' },
+  cancelButtonText: {
+    color: theme.colors.danger,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 15,
+  },
   retryButtonWrap: { marginTop: 6 },
   receiptButton: {
     flexDirection: 'row',
