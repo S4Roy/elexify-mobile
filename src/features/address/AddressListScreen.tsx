@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { AppText, Feedback } from '../../components/ui';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
@@ -145,6 +145,9 @@ function AddressCard({
 }
 
 export default function AddressListScreen() {
+  // The root reserves Android's navigation bar, so this is 0 there and the
+  // home-indicator inset on iOS.
+  const insets = useSafeAreaInsets();
   const addresses = useAddresses();
   const remove = useDeleteAddress();
   const confirm = useConfirm();
@@ -199,7 +202,7 @@ export default function AddressListScreen() {
           />
         ))}
       </ScrollView>
-      <SafeAreaView edges={['bottom']} style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push('/addresses/form')}
@@ -208,7 +211,7 @@ export default function AddressListScreen() {
           <Ionicons name="add" size={22} color="#FFFFFF" />
           <AppText style={styles.addLabel}>Add new address</AppText>
         </Pressable>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

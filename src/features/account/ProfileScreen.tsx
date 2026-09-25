@@ -14,7 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Feedback } from '../../components/ui';
 import { ShopHeader, SkeletonBlock, shop } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
@@ -259,6 +259,9 @@ function ProfileSkeleton() {
 }
 
 export default function ProfileScreen() {
+  // The root reserves Android's navigation bar, so this is 0 there and the
+  // home-indicator inset on iOS.
+  const insets = useSafeAreaInsets();
   const account = useAccount();
   const data = account.data;
   const updateAvatar = useUpdateAvatar();
@@ -754,7 +757,7 @@ export default function ProfileScreen() {
           )}
         </ScrollView>
         {data && (
-          <SafeAreaView edges={['bottom']} style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
             <Pressable
               accessibilityRole="button"
               accessibilityState={{
@@ -786,7 +789,7 @@ export default function ProfileScreen() {
                   : 'No changes to save'}
               </AppText>
             </Pressable>
-          </SafeAreaView>
+          </View>
         )}
       </KeyboardAvoidingView>
     </View>

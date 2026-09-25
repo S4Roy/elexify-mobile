@@ -17,7 +17,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Control, RegisterOptions, useController, useForm, useWatch } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { AppText, Feedback } from '../../components/ui';
@@ -125,6 +125,9 @@ function AccountField({
 }
 
 export default function AddressFormScreen() {
+  // The root reserves Android's navigation bar, so this is 0 there and the
+  // home-indicator inset on iOS.
+  const insets = useSafeAreaInsets();
   const route = useLocalSearchParams<{ id?: string; from?: string }>();
   const id = first(route.id) || undefined;
   // Opened from checkout: the saved address becomes the delivery address there.
@@ -547,7 +550,7 @@ export default function AddressFormScreen() {
             </View>
           )}
         </ScrollView>
-        <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: save.isPending, busy: save.isPending }} disabled={save.isPending}
             onPress={handleSubmit(submit, invalidFields => {
               const firstInvalid = Object.keys(invalidFields)[0] as TextFieldName | undefined;
@@ -558,7 +561,7 @@ export default function AddressFormScreen() {
               : <Ionicons name={fromCheckout ? 'checkmark-circle' : 'save-outline'} size={18} color="#FFFFFF" />}
             <AppText style={styles.saveText}>{saveLabel}</AppText>
           </Pressable>
-        </SafeAreaView>
+        </View>
       </KeyboardAvoidingView>
       <Modal visible={!!picker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicker(null)}>
         <SafeAreaView edges={['top', 'bottom']} style={styles.pickerPage}>
