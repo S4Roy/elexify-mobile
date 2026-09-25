@@ -176,56 +176,92 @@ export const shop = StyleSheet.create({
   },
   product: {
     flex: 1,
-    padding: 10,
-    gap: 6,
+    padding: 8,
+    gap: 8,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: '#E8EBEF',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 14,
   },
   productName: {
     fontFamily: theme.fonts.medium,
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 40,
+    fontSize: 13,
+    lineHeight: 18,
+    minHeight: 36,
+    color: theme.colors.text,
   },
-  categoryLabel: { color: '#A65C00', fontSize: 11, lineHeight: 16 },
-  price: {
-    color: theme.colors.primary,
-    fontFamily: theme.fonts.bold,
-    fontSize: 15,
+  productCompact: { padding: 7, gap: 7, borderRadius: 12 },
+  productImageCompact: { borderRadius: 8 },
+  imageFrame: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
   },
-  was: {
-    color: theme.colors.secondary,
-    textDecorationLine: 'line-through',
-    fontSize: 12,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'baseline',
-    gap: 6,
-  },
-  priceRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-  },
-  ratingChip: {
+  productBody: { gap: 4, flexGrow: 1 },
+  priceBlock: { gap: 1 },
+  mrpLabel: { color: '#9CA3AF', fontSize: 11, lineHeight: 15 },
+  ratingOverlay: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
   },
-  ratingChipText: {
-    color: theme.colors.secondary,
-    fontFamily: theme.fonts.medium,
+  ratingOverlayText: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  outOfStockChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(17,24,39,0.8)',
+  },
+  outOfStockChipText: {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
     fontSize: 11,
+    lineHeight: 14,
+  },
+  soldOutButton: {
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  soldOutText: {
+    color: '#9CA3AF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 13,
+  },
+  productNameCompact: { fontSize: 13, lineHeight: 18, minHeight: 36 },
+  categoryLabel: { color: '#6B7280', fontSize: 11, lineHeight: 15 },
+  price: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.bold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  was: {
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+    fontSize: 11,
+    lineHeight: 15,
   },
   productImage: {
     width: '100%',
-    aspectRatio: 1.15,
-    borderRadius: 9,
+    aspectRatio: 1,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
   },
   placeholder: {
@@ -238,43 +274,52 @@ export const shop = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   cartAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primary,
+    height: 34,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+    backgroundColor: '#FFFFFF',
   },
   cartAddButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.primary,
     fontFamily: theme.fonts.semibold,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: 0.3,
   },
   cartStepper: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 30,
-    paddingHorizontal: 6,
-    borderRadius: 8,
+    height: 34,
+    paddingHorizontal: 5,
+    borderRadius: 9,
     backgroundColor: theme.colors.primary,
   },
   cartStepperButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   cartStepperQty: {
     minWidth: 14,
@@ -387,18 +432,21 @@ export const shop = StyleSheet.create({
   productPressed: { opacity: 0.93, transform: [{ scale: 0.985 }] },
   discountBadge: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    paddingHorizontal: 6,
+    top: 8,
+    left: 0,
+    paddingLeft: 7,
+    paddingRight: 8,
     paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: theme.colors.danger,
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
+    backgroundColor: '#DC2626',
   },
   discountText: {
     color: '#FFFFFF',
     fontFamily: theme.fonts.semibold,
-    fontSize: 11,
+    fontSize: 10,
     lineHeight: 13,
+    letterSpacing: 0.2,
   },
   outOfStockOverlay: {
     position: 'absolute',
@@ -406,8 +454,10 @@ export const shop = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   // zIndex on iOS only — see headerRaised. Android stacks it via the
   // elevation ScrollShadow animates.
@@ -432,10 +482,17 @@ export const shop = StyleSheet.create({
   skeletonCardImage: { backgroundColor: '#E8EBEF' },
   skeletonCardCategory: { height: 10, width: '45%', marginTop: 4 },
   skeletonCardName: { gap: 7, minHeight: 40, paddingTop: 2 },
-  skeletonCardPrice: { height: 16, width: '50%' },
-  skeletonCardRating: { height: 14, width: 30 },
-  skeletonCardButton: { height: 30, borderRadius: 8, marginTop: 2 },
-  skeletonRow: { flexDirection: 'row', gap: 10 },
+  skeletonCardPrice: { height: 16, width: '55%' },
+  skeletonCardButton: { height: 34, borderRadius: 9 },
+  // ProductCard's `flex: 1` collapses the card to zero height when the grid
+  // sits in a fixed-height pane (category screen) rather than a list.
+  skeletonCardFrame: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
+  skeletonCardPriceStack: { gap: 6 },
+  skeletonCardMrp: { height: 11, width: '38%' },
+  skeletonRow: { flexDirection: 'row', gap: 10, flexShrink: 0 },
+  // Category screen grid spacing (CategoryScreen styles.grid / columns).
+  skeletonGridCompact: { gap: 10 },
+  skeletonRowCompact: { gap: 8 },
   skeletonTile: { flex: 1, maxWidth: '50%' },
   skeletonSummaryCard: {
     padding: 14,
@@ -758,7 +815,8 @@ export function ShopHeader({
             />
           )}
           <IconButton
-            name={search ? 'cart-outline' : 'bag-outline'}
+            // Same bag icon everywhere, matching the Cart tab.
+            name="bag-outline"
             label="Open cart"
             badge={cartCount}
             onPress={() => router.push('/cart')}
@@ -1102,8 +1160,8 @@ export function AddToCartControl({
           pressed && shop.iconPressed,
         ]}
       >
-        <Ionicons name="cart-outline" size={14} color="#FFFFFF" />
-        <AppText style={shop.cartAddButtonText}>Add</AppText>
+        <Ionicons name="add" size={16} color={theme.colors.primary} />
+        <AppText style={shop.cartAddButtonText}>ADD</AppText>
       </Pressable>
     );
   }
@@ -1159,8 +1217,12 @@ export function StarRating({
 }
 export const ProductCard = React.memo(function ProductCard({
   product,
+  compact = false,
 }: {
   product: Product;
+  /** Tighter card for narrow panes (e.g. beside the category rail): no
+   * category label and slightly less padding. */
+  compact?: boolean;
 }) {
   const hasDiscount =
     product.regularPrice !== null &&
@@ -1172,12 +1234,22 @@ export const ProductCard = React.memo(function ProductCard({
           100,
       )
     : 0;
+  const hasRating = product.rating !== null && product.rating > 0;
+  const priceText =
+    product.price === null ? 'Price on request' : money(product.price);
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`${product.name}. ${
-        product.price === null ? 'Price unavailable' : money(product.price)
-      }. View product details`}
+      accessibilityLabel={[
+        product.name,
+        priceText,
+        hasDiscount ? `${discountPercent}% off` : '',
+        hasRating ? `rated ${product.rating!.toFixed(1)}` : '',
+        product.inStock ? '' : 'out of stock',
+        'View product details',
+      ]
+        .filter(Boolean)
+        .join('. ')}
       onPress={() =>
         router.push({
           pathname: '/products/[slug]',
@@ -1189,56 +1261,74 @@ export const ProductCard = React.memo(function ProductCard({
           },
         })
       }
-      style={({ pressed }) => [shop.product, pressed && shop.productPressed]}
+      style={({ pressed }) => [
+        shop.product,
+        compact && shop.productCompact,
+        pressed && shop.productPressed,
+      ]}
     >
       <View style={shop.imageWrap}>
-        <StoreImage
-          uri={product.image}
-          label={product.name}
-          style={shop.productImage}
-        />
-        {!product.inStock && (
-          <View style={shop.outOfStockOverlay} pointerEvents="none" />
-        )}
-        {discountPercent > 0 && (
-          <View style={shop.discountBadge}>
-            <AppText style={shop.discountText}>-{discountPercent}%</AppText>
-          </View>
-        )}
-        <WishlistHeart product={product} />
-      </View>
-      {!!product.category && (
-        <AppText numberOfLines={1} style={shop.categoryLabel}>
-          {product.category}
-        </AppText>
-      )}
-      <AppText numberOfLines={2} style={shop.productName}>
-        {product.name}
-      </AppText>
-      <View style={shop.priceRatingRow}>
-        <View style={shop.priceRow}>
-          {hasDiscount && (
-            <AppText style={shop.was}>{money(product.regularPrice!)}</AppText>
-          )}
-          <AppText style={shop.price}>
-            {product.price === null
-              ? 'Price unavailable'
-              : money(product.price)}
-          </AppText>
+        <View style={shop.imageFrame}>
+          <StoreImage
+            uri={product.image}
+            label=""
+            style={[shop.productImage, compact && shop.productImageCompact]}
+          />
         </View>
-        {product.rating !== null && product.rating > 0 && (
-          <View style={shop.ratingChip}>
-            <Ionicons name="star" size={11} color="#F5A623" />
-            <AppText style={shop.ratingChipText}>
-              {product.rating.toFixed(1)}
-            </AppText>
+        {discountPercent > 0 && (
+          <View style={shop.discountBadge} pointerEvents="none">
+            <AppText style={shop.discountText}>{discountPercent}% OFF</AppText>
           </View>
         )}
+        {hasRating && (
+          <View style={shop.ratingOverlay} pointerEvents="none">
+            <AppText style={shop.ratingOverlayText}>
+              {product.rating!.toFixed(1)}
+            </AppText>
+            <Ionicons name="star" size={9} color="#F5A623" />
+          </View>
+        )}
+        {!product.inStock && (
+          <View style={shop.outOfStockOverlay} pointerEvents="none">
+            <View style={shop.outOfStockChip}>
+              <AppText style={shop.outOfStockChipText}>Out of stock</AppText>
+            </View>
+          </View>
+        )}
+        <WishlistHeart product={product} size={17} />
       </View>
-      {!product.inStock ? (
-        <AppText style={shop.muted}>Out of stock</AppText>
-      ) : (
+
+      <View style={shop.productBody}>
+        {!!product.category && !compact && (
+          <AppText numberOfLines={1} style={shop.categoryLabel}>
+            {product.category}
+          </AppText>
+        )}
+        <AppText
+          numberOfLines={2}
+          style={[shop.productName, compact && shop.productNameCompact]}
+        >
+          {product.name}
+        </AppText>
+        {/* Discount % is on the image badge, so the price line only adds the
+            struck-through MRP. */}
+        <View style={shop.priceBlock}>
+          <AppText style={shop.price}>{priceText}</AppText>
+          {hasDiscount && (
+            <AppText style={shop.mrpLabel}>
+              M.R.P.{' '}
+              <AppText style={shop.was}>{money(product.regularPrice!)}</AppText>
+            </AppText>
+          )}
+        </View>
+      </View>
+
+      {product.inStock ? (
         <AddToCartControl product={product} />
+      ) : (
+        <View style={shop.soldOutButton}>
+          <AppText style={shop.soldOutText}>Sold out</AppText>
+        </View>
       )}
     </Pressable>
   );
@@ -1407,22 +1497,34 @@ export function SkeletonBlock({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 /** Mirrors ProductCard row for row (image, category, two-line name, price,
  * Add button) so the grid doesn't jump when products arrive. */
-function ProductCardSkeleton() {
+function ProductCardSkeleton({ compact = false }: { compact?: boolean }) {
   return (
     <View
-      style={shop.product}
+      style={[
+        shop.product,
+        compact && shop.productCompact,
+        shop.skeletonCardFrame,
+      ]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <SkeletonBlock style={[shop.productImage, shop.skeletonCardImage]} />
-      <SkeletonBlock style={shop.skeletonCardCategory} />
-      <View style={shop.skeletonCardName}>
-        <SkeletonBlock style={shop.skeletonLineWide} />
-        <SkeletonBlock style={shop.skeletonLineMedium} />
-      </View>
-      <View style={shop.priceRatingRow}>
-        <SkeletonBlock style={shop.skeletonCardPrice} />
-        <SkeletonBlock style={shop.skeletonCardRating} />
+      <SkeletonBlock
+        style={[
+          shop.productImage,
+          compact && shop.productImageCompact,
+          shop.skeletonCardImage,
+        ]}
+      />
+      <View style={shop.productBody}>
+        {!compact && <SkeletonBlock style={shop.skeletonCardCategory} />}
+        <View style={shop.skeletonCardName}>
+          <SkeletonBlock style={shop.skeletonLineWide} />
+          <SkeletonBlock style={shop.skeletonLineMedium} />
+        </View>
+        <View style={shop.skeletonCardPriceStack}>
+          <SkeletonBlock style={shop.skeletonCardPrice} />
+          <SkeletonBlock style={shop.skeletonCardMrp} />
+        </View>
       </View>
       <SkeletonBlock style={shop.skeletonCardButton} />
     </View>
@@ -1431,7 +1533,7 @@ function ProductCardSkeleton() {
 function CategoryTileSkeleton() {
   return (
     <View
-      style={shop.categoryTile}
+      style={[shop.categoryTile, shop.skeletonCardFrame]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
@@ -1443,9 +1545,12 @@ function CategoryTileSkeleton() {
 /** Two-column shimmering placeholder grid shown while a category list is first loading. */
 export function CategoryGridSkeleton() {
   return (
-    <View style={shop.skeletonGrid} accessibilityLabel="Loading categories">
+    <View
+      style={[shop.skeletonGrid, shop.skeletonGridCompact]}
+      accessibilityLabel="Loading categories"
+    >
       {[0, 1, 2].map(row => (
-        <View key={row} style={shop.skeletonRow}>
+        <View key={row} style={[shop.skeletonRow, shop.skeletonRowCompact]}>
           <View style={shop.skeletonTile}>
             <CategoryTileSkeleton />
           </View>
@@ -1462,7 +1567,10 @@ export function ProductGridSkeleton({
   gap = 10,
   rowGap = 12,
   withCount = false,
+  compact = false,
 }: {
+  /** Match ProductCard's compact variant. */
+  compact?: boolean;
   /** Match the real list's columnWrapperStyle / contentContainerStyle gaps. */
   gap?: number;
   rowGap?: number;
@@ -1480,10 +1588,10 @@ export function ProductGridSkeleton({
       {[0, 1, 2].map(row => (
         <View key={row} style={[shop.skeletonRow, { gap }]}>
           <View style={shop.skeletonTile}>
-            <ProductCardSkeleton />
+            <ProductCardSkeleton compact={compact} />
           </View>
           <View style={shop.skeletonTile}>
-            <ProductCardSkeleton />
+            <ProductCardSkeleton compact={compact} />
           </View>
         </View>
       ))}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { AppText, Button, Feedback } from '../../components/ui';
+import { AppText, Feedback } from '../../components/ui';
 import {
   CategoryGridSkeleton,
   CategoryTile,
@@ -23,7 +24,7 @@ import { theme } from '../../theme';
 function ParentRailSkeleton() {
   return (
     <View accessibilityLabel="Loading categories">
-      {[0, 1, 2, 3, 4].map(item => (
+      {[0, 1, 2, 3, 4, 5].map(item => (
         <View key={item} style={styles.parent}>
           <SkeletonBlock style={styles.circleSkeleton} />
           <SkeletonBlock style={styles.parentTextSkeleton} />
@@ -58,8 +59,64 @@ export default function CategoryScreen() {
   const productsPending = products.isPending;
   const productsErrorMessage = products.error?.message ?? null;
   const productsPaused = products.fetchStatus === 'paused';
+  const parentName =
+    trail.length > 1 ? trail[trail.length - 2].name : active?.name;
+  const goBack = () => setTrail(t => t.slice(0, -1));
+  const backLink = trail.length > 0 && (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Back to ${parentName ?? 'previous category'}`}
+      onPress={goBack}
+      hitSlop={8}
+      style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
+    >
+      <Ionicons name="chevron-back" size={15} color={theme.colors.primary} />
+      <AppText numberOfLines={1} style={styles.backText}>
+        {parentName ?? 'Back'}
+      </AppText>
+    </Pressable>
+  );
+  const viewAll = (category: Category) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View all products in ${category.name}`}
+      onPress={() =>
+        router.push({
+          pathname: '/products',
+          params: { category: category.slug, title: category.name },
+        })
+      }
+      hitSlop={6}
+      style={({ pressed }) => [styles.viewAll, pressed && styles.pressed]}
+    >
+      <AppText style={styles.viewAllText}>View all</AppText>
+      <Ionicons name="chevron-forward" size={14} color={theme.colors.primary} />
+    </Pressable>
+  );
   const heading = (
     <View style={styles.heading}>
+      {current && (
+        <View style={styles.titleBlock}>
+          {backLink}
+          <View style={styles.titleRow}>
+            <AppText
+              accessibilityRole="header"
+              numberOfLines={2}
+              style={styles.title}
+            >
+              {current.name}
+            </AppText>
+            {viewAll(current)}
+          </View>
+          {items.length > 0 && (
+            <AppText style={styles.subtitle}>
+              {items.length} subcategor{items.length === 1 ? 'y' : 'ies'}
+            </AppText>
+          )}
+        </View>
+      )}
+      {/* After the title and actions, so the placeholder sits exactly where
+          the subcategory tiles render once loaded. */}
       <QueryState
         pending={roots.isPending || (!!current && children.isPending)}
         error={roots.error ?? children.error}
@@ -72,46 +129,28 @@ export default function CategoryScreen() {
         }}
         skeleton={<CategoryGridSkeleton />}
       />
-      {current && (
-        <>
-          <AppText accessibilityRole="header" style={shop.heading}>
-            {current.name}
-          </AppText>
-          {trail.length > 0 && (
-            <Button
-              label="Back to parent"
-              onPress={() => setTrail(t => t.slice(0, -1))}
-            />
-          )}
-          <Button
-            label="View all products"
-            onPress={() =>
-              router.push({
-                pathname: '/products',
-                params: { category: current.slug, title: current.name },
-              })
-            }
-          />
-        </>
-      )}
     </View>
   );
-  // The category is already highlighted in the rail, so the products view
-  // skips the duplicate title/CTA and only surfaces a result count.
-  const productsCount = !!products.data && (
-    <AppText style={[shop.muted, styles.countLabel]}>
-      {products.data.pages[0].total}{' '}
-      {products.data.pages[0].total === 1 ? 'product' : 'products'}
-    </AppText>
-  );
-  // Kept outside the loading/error/loaded branches so it stays visible
-  // throughout, instead of disappearing while products are (re)loading.
-  const backToParent = trail.length > 0 && (
-    <View style={styles.backRow}>
-      <Button
-        label="Back to parent"
-        onPress={() => setTrail(t => t.slice(0, -1))}
-      />
+  // Leaf category: title and product count stay pinned above the grid while
+  // products (re)load, instead of disappearing with the list.
+  const total = products.data?.pages[0].total;
+  const productsHeader = !!current && (
+    <View style={[styles.titleBlock, styles.productsHead]}>
+      {backLink}
+      <AppText
+        accessibilityRole="header"
+        numberOfLines={2}
+        style={styles.title}
+      >
+        {current.name}
+      </AppText>
+      {total !== undefined ? (
+        <AppText style={styles.subtitle}>
+          {total} {total === 1 ? 'product' : 'products'}
+        </AppText>
+      ) : (
+        <SkeletonBlock style={styles.countSkeleton} />
+      )}
     </View>
   );
   return (
@@ -145,12 +184,22 @@ export default function CategoryScreen() {
                 }}
                 style={[styles.parent, active?.id === item.id && styles.active]}
               >
-                <StoreImage
-                  uri={item.image}
-                  label={item.name}
-                  style={styles.circle}
-                />
-                <AppText numberOfLines={2} style={styles.parentText}>
+                {active?.id === item.id && <View style={styles.accent} />}
+                <View
+                  style={[
+                    styles.circleWrap,
+                    active?.id === item.id && styles.circleWrapActive,
+                  ]}
+                >
+                  <StoreImage uri={item.image} label="" style={styles.circle} />
+                </View>
+                <AppText
+                  numberOfLines={2}
+                  style={[
+                    styles.parentText,
+                    active?.id === item.id && styles.parentTextActive,
+                  ]}
+                >
                   {item.name}
                 </AppText>
               </Pressable>
@@ -178,7 +227,7 @@ export default function CategoryScreen() {
         )}
         {showProducts ? (
           <View style={styles.children}>
-            {backToParent}
+            {productsHeader}
             {!apiConfig.baseUrl ? (
               <View style={styles.grid}>
                 <Feedback
@@ -203,7 +252,9 @@ export default function CategoryScreen() {
                   />
                 </View>
               ) : (
-                <ProductGridSkeleton withCount />
+                <View style={styles.skeletonPane}>
+                  <ProductGridSkeleton compact gap={8} rowGap={10} />
+                </View>
               )
             ) : (
               <FlatList
@@ -220,10 +271,9 @@ export default function CategoryScreen() {
                     products.fetchNextPage().catch(() => undefined);
                   }
                 }}
-                ListHeaderComponent={productsCount || null}
                 renderItem={({ item }) => (
                   <View style={styles.tile}>
-                    <ProductCard product={item} />
+                    <ProductCard product={item} compact />
                   </View>
                 )}
                 ListEmptyComponent={
@@ -320,70 +370,139 @@ export default function CategoryScreen() {
     </View>
   );
 }
+const RAIL_WIDTH = 92;
+
 const styles = StyleSheet.create({
-  body: { flex: 1, flexDirection: 'row', padding: 12, gap: 12 },
+  pressed: { opacity: 0.7 },
+  body: { flex: 1, flexDirection: 'row' },
   rail: {
-    maxWidth: 98,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 16,
+    width: RAIL_WIDTH,
+    flexGrow: 0,
+    backgroundColor: '#F3F5F7',
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: theme.colors.border,
   },
   parent: {
     alignItems: 'center',
-    padding: 8,
-    gap: 7,
-    minHeight: 108,
-    margin: 4,
-    borderRadius: 14,
+    gap: 6,
+    paddingTop: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 6,
+    minHeight: 96,
   },
-  active: { backgroundColor: '#005A50' },
-  parentText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
+  active: { backgroundColor: '#FFFFFF' },
+  // Selected-item marker on the rail's leading edge.
+  accent: {
+    position: 'absolute',
+    left: 0,
+    top: 10,
+    bottom: 10,
+    width: 4,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+    backgroundColor: theme.colors.primary,
   },
+  circleWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    padding: 2,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  circleWrapActive: { borderColor: theme.colors.primary },
   circle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: '100%',
+    height: '100%',
+    borderRadius: 26,
     backgroundColor: '#FFFFFF',
   },
-  circleSkeleton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+  parentText: {
+    color: '#4B5563',
+    fontSize: 11,
+    lineHeight: 14,
+    textAlign: 'center',
   },
-  parentTextSkeleton: {
-    width: 46,
-    height: 11,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+  parentTextActive: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
   },
+  circleSkeleton: { width: 52, height: 52, borderRadius: 26 },
+  parentTextSkeleton: { width: 50, height: 9, borderRadius: 5 },
   railLoading: {
-    color: '#FFFFFF',
-    fontSize: 12,
+    color: theme.colors.secondary,
+    fontSize: 11,
     textAlign: 'center',
     paddingVertical: 12,
   },
   railRetry: {
     alignItems: 'center',
     paddingVertical: 10,
-    marginHorizontal: 4,
+    marginHorizontal: 8,
+    marginVertical: 6,
     borderRadius: 10,
-    backgroundColor: '#005A50',
+    backgroundColor: theme.colors.primaryLight,
   },
   railRetryText: {
-    color: '#FFFFFF',
+    color: theme.colors.primary,
     fontFamily: theme.fonts.medium,
     fontSize: 12,
   },
-  children: { flex: 1 },
+  children: { flex: 1, backgroundColor: '#FFFFFF' },
   flexOne: { flex: 1 },
-  backRow: { paddingBottom: 12 },
-  countLabel: { paddingBottom: 4 },
-  grid: { gap: 12, paddingBottom: 24 },
-  columns: { gap: 10 },
+  // Clips the placeholder rows that don't fit, instead of squeezing them.
+  skeletonPane: { flex: 1, overflow: 'hidden', padding: 12, paddingTop: 0 },
+  grid: { padding: 12, gap: 10, paddingBottom: 24 },
+  columns: { gap: 8 },
   tile: { flex: 1, maxWidth: '50%' },
   heading: { gap: 12 },
+  titleBlock: { gap: 2 },
+  productsHead: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 10 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  title: {
+    flexShrink: 1,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: theme.colors.text,
+  },
+  subtitle: { fontSize: 12, lineHeight: 17, color: theme.colors.secondary },
+  countSkeleton: { width: 70, height: 11, marginTop: 4 },
+  viewAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    height: 30,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 15,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  viewAllText: {
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 2,
+    marginBottom: 4,
+    marginLeft: -3,
+    maxWidth: '100%',
+  },
+  backText: {
+    flexShrink: 1,
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });
