@@ -24,15 +24,39 @@ import type { Category, Product } from '../../api/discovery';
 import { useToggleWishlist } from '../../features/wishlist/hooks';
 import { useCart, useCartMutation } from '../../features/cart/hooks';
 
-const AnimatedSafeAreaView = Animated.createAnimatedComponent(SafeAreaView);
-// Scroll distance (px) over which the header goes from expanded to compact.
-const HEADER_COLLAPSE_DISTANCE = 64;
-
 export const shop = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
   flex: { flex: 1 },
   searchLabel: { flex: 1, color: theme.colors.secondary },
   header: { backgroundColor: '#FFFFFF' },
+  // Keeps the header (and its shadow) drawn above the feed that follows it.
+  headerRaised: { zIndex: 2 },
+  headerShadow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    shadowOpacity: 0.12,
+    elevation: 6,
+  },
+  headerInnerHome: { paddingBottom: 8, gap: 0 },
+  homeSearchPanel: {
+    backgroundColor: '#EEFFFD',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  homeSearch: {
+    gap: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    elevation: 1,
+  },
+  homeSearchPressed: { opacity: 0.85 },
   headerInner: {
     backgroundColor: '#EEFFFD',
     paddingHorizontal: 16,
@@ -510,6 +534,10 @@ export function IconButton({
     </Pressable>
   );
 }
+/** Scroll offset (px) over which the home top bar fades its compact search
+ * icon and shadow in — roughly the point the in-feed search bar scrolls away. */
+const HEADER_SEARCH_REVEAL = [28, 72];
+
 export function ShopHeader({
   title,
   search = false,
@@ -518,60 +546,44 @@ export function ShopHeader({
   scrollY,
 }: {
   title?: string;
+  /** Home variant: large logo; pair with <HomeSearchPanel> as the first item
+   * of the scrolling feed, and pass `scrollY` so the compact search icon and
+   * shadow appear once that panel scrolls away. */
   search?: boolean;
   back?: boolean;
   deliveryLabel?: string;
-  /** Optional scroll offset (px) driving the sticky/compact scroll transition. */
+  /** Scroll offset driven by a native-driver Animated.event. Only opacity and
+   * transform are animated from it, never layout — resizing the header while
+   * the list scrolls made the list resize too and the two fed back into each
+   * other (visible shaking at the sticky point). */
   scrollY?: Animated.Value;
 }) {
   const { width } = useWindowDimensions();
   const scale = Math.min(width / 440, 1.2);
-  const fallbackScrollY = useRef(new Animated.Value(0)).current;
-  const y = scrollY ?? fallbackScrollY;
   const cart = useCart();
   const cartCount =
     cart.data?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  // 0 = fully expanded, 1 = fully compact.
-  const collapse = y.interpolate({
-    inputRange: [0, HEADER_COLLAPSE_DISTANCE],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const shadowOpacity = y.interpolate({
-    inputRange: [0, 16],
-    outputRange: [0, 0.15],
-    extrapolate: 'clamp',
-  });
-  const elevation = y.interpolate({
-    inputRange: [0, 16],
-    outputRange: [0, 6],
-    extrapolate: 'clamp',
-  });
+  // Without a scroll source the home icon is always visible and the shadow
+  // stays off, matching the old resting state of non-scrolling screens.
+  const reveal = scrollY
+    ? scrollY.interpolate({
+        inputRange: HEADER_SEARCH_REVEAL.map(v => v * scale),
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      })
+    : null;
   return (
-    <AnimatedSafeAreaView
-      edges={['top']}
-      style={[
-        shop.header,
-        {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowRadius: 8,
-          shadowOpacity,
-          elevation,
-        },
-      ]}
-    >
-      <Animated.View
+    <SafeAreaView edges={['top']} style={[shop.header, shop.headerRaised]}>
+      {reveal && (
+        <Animated.View
+          pointerEvents="none"
+          style={[shop.headerShadow, { opacity: reveal }]}
+        />
+      )}
+      <View
         style={[
           shop.headerInner,
-          search && {
-            paddingTop: 12 * scale,
-            paddingBottom: collapse.interpolate({
-              inputRange: [0, 1],
-              outputRange: [12 * scale, 8],
-            }),
-            gap: 0,
-          },
+          search && [shop.headerInnerHome, { paddingTop: 12 * scale }],
         ]}
       >
         <View style={shop.row}>
@@ -613,13 +625,13 @@ export function ShopHeader({
               />
             </View>
           )}
-          {search ? (
+          {search && reveal ? (
             <Animated.View
               style={{
-                opacity: collapse,
+                opacity: reveal,
                 transform: [
                   {
-                    scale: collapse.interpolate({
+                    scale: reveal.interpolate({
                       inputRange: [0, 1],
                       outputRange: [0.75, 1],
                     }),
@@ -647,95 +659,78 @@ export function ShopHeader({
             onPress={() => router.push('/cart')}
           />
         </View>
-        {search ? (
-          <Animated.View
-            style={{
-              opacity: collapse.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 0],
-              }),
-              maxHeight: collapse.interpolate({
-                inputRange: [0, 1],
-                outputRange: [200, 0],
-              }),
-              marginTop: collapse.interpolate({
-                inputRange: [0, 1],
-                outputRange: [16 * scale, 0],
-              }),
-              overflow: 'hidden',
-            }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Search products"
-              onPress={() => router.push('/search')}
-              android_ripple={{ color: theme.colors.primaryLight }}
-              style={[
-                shop.search,
-                { minHeight: 55 * scale, borderRadius: 12 * scale },
-              ]}
-            >
-              <AppText style={shop.searchLabel}>Search here...</AppText>
-              <Ionicons
-                name="search-outline"
-                size={22}
-                color={theme.colors.secondary}
-              />
-            </Pressable>
-            {!!deliveryLabel && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delivery address: ${deliveryLabel}. Manage addresses`}
-                onPress={() => router.push('/addresses')}
-                hitSlop={7}
-                style={[
-                  shop.deliveryRow,
-                  { minHeight: 30 * scale, marginTop: 16 * scale },
-                ]}
-              >
-                <Ionicons
-                  name="location-outline"
-                  size={19}
-                  color={theme.colors.secondary}
-                />
-                <AppText numberOfLines={1} style={shop.deliveryText}>
-                  {deliveryLabel}
-                </AppText>
-                <Ionicons
-                  name="chevron-down"
-                  size={16}
-                  color={theme.colors.secondary}
-                />
-              </Pressable>
-            )}
-          </Animated.View>
-        ) : (
-          !!deliveryLabel && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Delivery address: ${deliveryLabel}. Manage addresses`}
-              onPress={() => router.push('/addresses')}
-              hitSlop={7}
-              style={[shop.deliveryRow, { minHeight: 30 * scale }]}
-            >
-              <Ionicons
-                name="location-outline"
-                size={19}
-                color={theme.colors.secondary}
-              />
-              <AppText numberOfLines={1} style={shop.deliveryText}>
-                {deliveryLabel}
-              </AppText>
-              <Ionicons
-                name="chevron-down"
-                size={16}
-                color={theme.colors.secondary}
-              />
-            </Pressable>
-          )
+        {!search && !!deliveryLabel && (
+          <DeliveryRow label={deliveryLabel} scale={scale} />
         )}
-      </Animated.View>
-    </AnimatedSafeAreaView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function DeliveryRow({
+  label,
+  scale,
+  style,
+}: {
+  label: string;
+  scale: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Delivery address: ${label}. Manage addresses`}
+      onPress={() => router.push('/addresses')}
+      hitSlop={7}
+      style={[shop.deliveryRow, { minHeight: 30 * scale }, style]}
+    >
+      <Ionicons
+        name="location-outline"
+        size={19}
+        color={theme.colors.secondary}
+      />
+      <AppText numberOfLines={1} style={shop.deliveryText}>
+        {label}
+      </AppText>
+      <Ionicons name="chevron-down" size={16} color={theme.colors.secondary} />
+    </Pressable>
+  );
+}
+
+/** Home search bar + delivery address. Render it as the first item of the
+ * home feed so it scrolls away natively — no animated layout, no jitter. */
+export function HomeSearchPanel({ deliveryLabel }: { deliveryLabel?: string }) {
+  const { width } = useWindowDimensions();
+  const scale = Math.min(width / 440, 1.2);
+  return (
+    <View style={[shop.homeSearchPanel, { paddingBottom: 12 * scale }]}>
+      <Pressable
+        accessibilityRole="search"
+        accessibilityLabel="Search products"
+        onPress={() => router.push('/search')}
+        android_ripple={{ color: theme.colors.primaryLight }}
+        style={({ pressed }) => [
+          shop.search,
+          shop.homeSearch,
+          { minHeight: 55 * scale, borderRadius: 14 * scale },
+          pressed && shop.homeSearchPressed,
+        ]}
+      >
+        <Ionicons
+          name="search-outline"
+          size={20}
+          color={theme.colors.primary}
+        />
+        <AppText style={shop.searchLabel}>Search products, brands…</AppText>
+      </Pressable>
+      {!!deliveryLabel && (
+        <DeliveryRow
+          label={deliveryLabel}
+          scale={scale}
+          style={{ marginTop: 10 * scale }}
+        />
+      )}
+    </View>
   );
 }
 export function SearchField({

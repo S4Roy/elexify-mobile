@@ -3,7 +3,7 @@ import { Animated, View, StyleSheet } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { AppText, Button, Feedback } from '../../components/ui';
-import { ShopHeader, shop } from '../../components/shop';
+import { HomeSearchPanel, ShopHeader, shop } from '../../components/shop';
 import { fetchHome } from '../../api/discovery';
 import { apiConfig } from '../../api/config';
 import { useIdentity } from '../catalog/hooks';
@@ -43,14 +43,14 @@ export default function HomeScreen() {
   }
   return (
     <View style={shop.page}>
-      <ShopHeader search deliveryLabel={deliveryLabel} scrollY={scrollY} />
+      <ShopHeader search scrollY={scrollY} />
       <Animated.FlatList
         data={sections}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.feed}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false },
+          { useNativeDriver: true },
         )}
         scrollEventThrottle={16}
         refreshing={home.isRefetching}
@@ -63,20 +63,23 @@ export default function HomeScreen() {
             .catch(() => undefined);
         }}
         ListHeaderComponent={
-          home.error || (home.isPending && home.fetchStatus === 'paused') ? (
-            <View style={styles.status}>
-              <QueryState
-                pending={home.isPending}
-                error={home.error}
-                paused={home.fetchStatus === 'paused'}
-                retry={() => {
-                  home.refetch().catch(() => undefined);
-                }}
-              />
-            </View>
-          ) : home.isPending ? (
-            <HomeSkeleton />
-          ) : null
+          <>
+            <HomeSearchPanel deliveryLabel={deliveryLabel} />
+            {home.error || (home.isPending && home.fetchStatus === 'paused') ? (
+              <View style={styles.status}>
+                <QueryState
+                  pending={home.isPending}
+                  error={home.error}
+                  paused={home.fetchStatus === 'paused'}
+                  retry={() => {
+                    home.refetch().catch(() => undefined);
+                  }}
+                />
+              </View>
+            ) : home.isPending ? (
+              <HomeSkeleton />
+            ) : null}
+          </>
         }
         renderItem={({ item }) => <HomeSectionView section={item} />}
         ListEmptyComponent={
