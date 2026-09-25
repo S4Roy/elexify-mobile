@@ -480,28 +480,96 @@ export const shop = StyleSheet.create({
     borderTopColor: theme.colors.border,
   },
   skeletonCheckoutItemImage: { width: 52, height: 52, borderRadius: 8 },
-  skeletonOrderList: { padding: 16, gap: 12 },
+  // Order skeletons: no outer padding — the list / screen body already pads.
+  skeletonOrderList: { gap: 12 },
   skeletonOrderCard: {
-    gap: 8,
-    padding: 16,
+    gap: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
   },
-  skeletonOrderHeaderRow: {
+  skeletonOrderHead: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  skeletonOrderPill: { height: 20, width: 84, borderRadius: 10 },
-  skeletonOrderDetail: { padding: 16, gap: 16 },
-  skeletonOrderDetailCard: {
+    alignItems: 'flex-start',
     gap: 10,
+  },
+  skeletonOrderIcon: { width: 38, height: 38, borderRadius: 12 },
+  skeletonOrderHeadText: { flex: 1, gap: 8, paddingTop: 2 },
+  skeletonOrderTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  skeletonOrderNumber: { height: 14, width: '42%' },
+  skeletonOrderPill: { height: 18, width: 72, borderRadius: 9 },
+  skeletonOrderDate: { height: 11, width: '55%' },
+  skeletonOrderFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  skeletonOrderFooterLeft: { gap: 6 },
+  skeletonOrderFooterRight: { gap: 6, alignItems: 'flex-end' },
+  skeletonOrderLabel: { height: 9, width: 64 },
+  skeletonOrderTotal: { height: 16, width: 84 },
+  skeletonOrderMetaShort: { height: 10, width: 44 },
+  skeletonOrderMeta: { height: 10, width: 88 },
+  skeletonOrderDetail: { gap: 16 },
+  skeletonOrderDetailCard: {
+    gap: 12,
     padding: 14,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.card,
+    backgroundColor: '#FFFFFF',
   },
+  skeletonPillRow: { flexDirection: 'row', gap: 8 },
+  skeletonStatusPill: { height: 22, width: 92, borderRadius: 11 },
+  skeletonPaymentPill: { height: 22, width: 64, borderRadius: 11 },
+  skeletonDetailMeta: { height: 12, width: '72%' },
+  skeletonDetailLink: { height: 14, width: '40%' },
+  skeletonDetailEyebrow: { height: 11, width: '32%' },
+  skeletonDetailHeadline: { height: 18, width: '68%' },
+  skeletonDetailHeading: { height: 16, width: '30%' },
+  skeletonDetailCta: { height: 44, borderRadius: 10 },
+  skeletonStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  skeletonStepDot: { width: 18, height: 18, borderRadius: 9 },
+  skeletonStepLine: {
+    flex: 1,
+    height: 3,
+    marginHorizontal: 4,
+    borderRadius: 2,
+  },
+  skeletonItemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  skeletonItemImage: { width: 56, height: 56, borderRadius: 8 },
+  skeletonItemText: { flex: 1, gap: 7 },
+  skeletonItemQty: { height: 11, width: '28%' },
+  skeletonItemPrice: { height: 12, width: '45%' },
+  skeletonItemTotal: { height: 14, width: 52 },
+  skeletonSummaryTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  skeletonSummaryTotalLabel: { height: 15, width: '30%' },
+  skeletonSummaryTotalValue: { height: 15, width: '24%' },
+  skeletonDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.border,
+  },
+  skeletonTimelineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  skeletonTimelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 2 },
   sheetContainer: { flex: 1, justifyContent: 'flex-end' },
   sheetBackdrop: {
     position: 'absolute',
@@ -1477,47 +1545,144 @@ export function CheckoutSkeleton() {
     </View>
   );
 }
-/** Shimmering placeholder shown while the orders list is first loading — mirrors the order-card layout (number + status pill, item/total line, payment line). */
+/** Stepper placeholder: dots joined by lines, like MilestoneStepper. */
+function SkeletonStepper() {
+  return (
+    <View style={shop.skeletonStepper}>
+      {[0, 1, 2, 3].map(i => (
+        <React.Fragment key={i}>
+          {i > 0 && <SkeletonBlock style={shop.skeletonStepLine} />}
+          <SkeletonBlock style={shop.skeletonStepDot} />
+        </React.Fragment>
+      ))}
+    </View>
+  );
+}
+/** Shimmering placeholder shown while the orders list is first loading — mirrors the order card row for row (icon, number + status pill, placed date, total / items / payment footer). No outer padding: the list already pads. */
 export function OrdersListSkeleton() {
   return (
-    <View style={shop.skeletonOrderList} accessibilityLabel="Loading orders">
+    <View
+      style={shop.skeletonOrderList}
+      accessible
+      accessibilityLabel="Loading orders"
+      accessibilityState={{ busy: true }}
+    >
       {[0, 1, 2, 3].map(row => (
         <View key={row} style={shop.skeletonOrderCard}>
-          <View style={shop.skeletonOrderHeaderRow}>
-            <SkeletonBlock style={shop.skeletonLineMedium} />
-            <SkeletonBlock style={shop.skeletonOrderPill} />
+          <View style={shop.skeletonOrderHead}>
+            <SkeletonBlock style={shop.skeletonOrderIcon} />
+            <View style={shop.skeletonOrderHeadText}>
+              <View style={shop.skeletonOrderTitleRow}>
+                <SkeletonBlock style={shop.skeletonOrderNumber} />
+                <SkeletonBlock style={shop.skeletonOrderPill} />
+              </View>
+              <SkeletonBlock style={shop.skeletonOrderDate} />
+            </View>
           </View>
-          <SkeletonBlock style={shop.skeletonLineWide} />
-          <SkeletonBlock style={shop.skeletonLineNarrow} />
+          <View style={shop.skeletonOrderFooter}>
+            <View style={shop.skeletonOrderFooterLeft}>
+              <SkeletonBlock style={shop.skeletonOrderLabel} />
+              <SkeletonBlock style={shop.skeletonOrderTotal} />
+            </View>
+            <View style={shop.skeletonOrderFooterRight}>
+              <SkeletonBlock style={shop.skeletonOrderMetaShort} />
+              <SkeletonBlock style={shop.skeletonOrderMeta} />
+            </View>
+          </View>
         </View>
       ))}
     </View>
   );
 }
-/** Shimmering placeholder shown while an order's detail is first loading — mirrors the status header, items and summary sections. */
+/** Shimmering placeholder shown while an order's detail is first loading — mirrors the status card, tracking summary, items and order summary. No outer padding: the screen body already pads. */
 export function OrderDetailSkeleton() {
   return (
-    <View style={shop.skeletonOrderDetail} accessibilityLabel="Loading order">
+    <View
+      style={shop.skeletonOrderDetail}
+      accessible
+      accessibilityLabel="Loading order"
+      accessibilityState={{ busy: true }}
+    >
       <View style={shop.skeletonOrderDetailCard}>
-        <View style={shop.skeletonOrderHeaderRow}>
-          <SkeletonBlock style={shop.skeletonLineMedium} />
-          <SkeletonBlock style={shop.skeletonOrderPill} />
+        <View style={shop.skeletonPillRow}>
+          <SkeletonBlock style={shop.skeletonStatusPill} />
+          <SkeletonBlock style={shop.skeletonPaymentPill} />
         </View>
-        <SkeletonBlock style={shop.skeletonLineNarrow} />
+        <SkeletonBlock style={shop.skeletonDetailMeta} />
+        <SkeletonBlock style={shop.skeletonDetailLink} />
       </View>
       <View style={shop.skeletonOrderDetailCard}>
-        <SkeletonBlock style={shop.skeletonLineNarrow} />
+        <SkeletonBlock style={shop.skeletonDetailEyebrow} />
+        <SkeletonBlock style={shop.skeletonDetailHeadline} />
+        <SkeletonStepper />
+        <SkeletonBlock style={shop.skeletonDetailCta} />
+      </View>
+      <View style={shop.skeletonOrderDetailCard}>
+        <SkeletonBlock style={shop.skeletonDetailHeading} />
         {[0, 1].map(row => (
-          <View key={row} style={shop.skeletonCheckoutItemRow}>
-            <SkeletonBlock style={shop.skeletonCheckoutItemImage} />
-            <View style={shop.flex}>
+          <View key={row} style={shop.skeletonItemRow}>
+            <SkeletonBlock style={shop.skeletonItemImage} />
+            <View style={shop.skeletonItemText}>
               <SkeletonBlock style={shop.skeletonLineWide} />
+              <SkeletonBlock style={shop.skeletonItemQty} />
+              <SkeletonBlock style={shop.skeletonItemPrice} />
+            </View>
+            <SkeletonBlock style={shop.skeletonItemTotal} />
+          </View>
+        ))}
+      </View>
+      <View style={shop.skeletonOrderDetailCard}>
+        <SkeletonBlock style={shop.skeletonDetailHeading} />
+        {[0, 1, 2, 3].map(line => (
+          <View key={line} style={shop.between}>
+            <SkeletonBlock style={shop.skeletonSummaryLabel} />
+            <SkeletonBlock style={shop.skeletonSummaryValue} />
+          </View>
+        ))}
+        <View style={shop.skeletonSummaryTotal}>
+          <SkeletonBlock style={shop.skeletonSummaryTotalLabel} />
+          <SkeletonBlock style={shop.skeletonSummaryTotalValue} />
+        </View>
+      </View>
+    </View>
+  );
+}
+/** Shimmering placeholder for the full tracking screen — order header with milestone stepper, a shipment card and the activity timeline. */
+export function OrderTrackingSkeleton() {
+  return (
+    <View
+      style={shop.skeletonOrderDetail}
+      accessible
+      accessibilityLabel="Loading tracking"
+      accessibilityState={{ busy: true }}
+    >
+      <View style={shop.skeletonOrderDetailCard}>
+        <View style={shop.between}>
+          <SkeletonBlock style={shop.skeletonOrderNumber} />
+          <SkeletonBlock style={shop.skeletonOrderPill} />
+        </View>
+        <SkeletonBlock style={shop.skeletonDetailHeadline} />
+        <SkeletonBlock style={shop.skeletonDetailMeta} />
+        <View style={shop.skeletonDivider} />
+        <SkeletonStepper />
+      </View>
+      <View style={shop.skeletonOrderDetailCard}>
+        <SkeletonBlock style={shop.skeletonDetailEyebrow} />
+        <SkeletonBlock style={shop.skeletonLineWide} />
+        <SkeletonBlock style={shop.skeletonLineMedium} />
+      </View>
+      <View style={shop.skeletonOrderDetailCard}>
+        <SkeletonBlock style={shop.skeletonDetailHeading} />
+        {[0, 1, 2].map(row => (
+          <View key={row} style={shop.skeletonTimelineRow}>
+            <SkeletonBlock style={shop.skeletonTimelineDot} />
+            <View style={shop.skeletonItemText}>
               <SkeletonBlock style={shop.skeletonLineMedium} />
+              <SkeletonBlock style={shop.skeletonItemQty} />
             </View>
           </View>
         ))}
       </View>
-      <SkeletonSummaryCard />
     </View>
   );
 }

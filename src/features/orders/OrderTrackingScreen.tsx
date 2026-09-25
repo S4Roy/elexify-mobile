@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { AppText, Feedback } from '../../components/ui';
-import { OrderDetailSkeleton, ShopHeader, shop } from '../../components/shop';
+import { OrderTrackingSkeleton, ShopHeader, shop } from '../../components/shop';
 import { theme } from '../../theme';
 import { QueryState } from '../catalog/QueryState';
 import { useOrderTracking } from './hooks';
@@ -69,7 +69,7 @@ export default function OrderTrackingScreen() {
           retry={() => {
             tracking.refetch().catch(() => undefined);
           }}
-          skeleton={<OrderDetailSkeleton />}
+          skeleton={<OrderTrackingSkeleton />}
         />
         {!tracking.isPending && !tracking.isError && !data && (
           <Feedback
