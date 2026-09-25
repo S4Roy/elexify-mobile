@@ -13,6 +13,7 @@ import {
   fetchOrders,
   retryOrderPayment,
 } from '../../api/order';
+import { fetchOrderTracking } from '../../api/tracking';
 import { createReturn, type ReturnType } from '../../api/returns';
 import { uploadMedia, type PickedImage } from '../../api/media';
 import { useSession } from '../../stores/session';
@@ -37,6 +38,18 @@ export function useOrderDetail(id: string) {
     queryKey: ['order-detail', id],
     queryFn: ({ signal }) => fetchOrderDetail(id, signal),
     enabled: !!apiConfig.baseUrl && !!id,
+  });
+}
+
+/** Milestones, shipments and courier scans for one of the customer's orders.
+ * The backend pulls fresh courier scans (throttled) on each fetch, so a
+ * refetch doubles as "refresh tracking". */
+export function useOrderTracking(id: string) {
+  return useQuery({
+    queryKey: ['order-tracking', id],
+    queryFn: ({ signal }) => fetchOrderTracking(id, signal),
+    enabled: !!apiConfig.baseUrl && !!id,
+    staleTime: 60_000,
   });
 }
 
@@ -120,6 +133,9 @@ export function useCancelOrder(id: string) {
     onSuccess: () => {
       queryClient
         .invalidateQueries({ queryKey: ['order-detail', id] })
+        .catch(() => undefined);
+      queryClient
+        .invalidateQueries({ queryKey: ['order-tracking', id] })
         .catch(() => undefined);
       queryClient
         .invalidateQueries({ queryKey: ['orders', identity] })

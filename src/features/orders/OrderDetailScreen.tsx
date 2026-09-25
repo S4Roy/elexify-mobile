@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import RazorpayCheckout, { RazorpayError } from 'react-native-razorpay';
 import { AppText, Button, Feedback } from '../../components/ui';
 import {
@@ -44,8 +44,10 @@ import {
   useDownloadInvoice,
   useMaybePromptReview,
   useOrderDetail,
+  useOrderTracking,
   useRetryPayment,
 } from './hooks';
+import { TrackingSummaryCard } from './TrackingViews';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
 
 const RETRY_WINDOW_MS = 60 * 60 * 1000;
@@ -203,6 +205,7 @@ export default function OrderDetailScreen() {
   const id = first(route.id);
   const order = useOrderDetail(id);
   const data = order.data;
+  const tracking = useOrderTracking(id);
   useMaybePromptReview(data?.orderStatus);
   const cancelOrder = useCancelOrder(id);
   const downloadInvoice = useDownloadInvoice(data?.orderNumber ?? '');
@@ -274,6 +277,7 @@ export default function OrderDetailScreen() {
         razorpaySignature: result.razorpay_signature,
       });
       await order.refetch();
+      tracking.refetch().catch(() => undefined);
     } catch (err) {
       setRetryError(
         err instanceof Error ? err.message : 'Unable to retry payment.',
@@ -422,16 +426,30 @@ export default function OrderDetailScreen() {
               )}
             </View>
 
-            {(!!data.packages.length || data.legacyTracking) && (
-              <View style={styles.section}>
-                <AppText style={shop.heading}>Packages & Tracking</AppText>
-                {data.packages.map(pkg => (
-                  <PackageCard key={pkg.packageNumber} pkg={pkg} />
-                ))}
-                {!data.packages.length && data.legacyTracking && (
-                  <LegacyTrackingCard tracking={data.legacyTracking} />
-                )}
-              </View>
+            {tracking.data ? (
+              <TrackingSummaryCard
+                data={tracking.data}
+                onOpen={() =>
+                  router.push({
+                    pathname: '/orders/[id]/track',
+                    params: { id: data.id },
+                  })
+                }
+              />
+            ) : (
+              // Fallback while tracking is loading or unavailable: the
+              // package status straight from the order payload.
+              (!!data.packages.length || data.legacyTracking) && (
+                <View style={styles.section}>
+                  <AppText style={shop.heading}>Packages & Tracking</AppText>
+                  {data.packages.map(pkg => (
+                    <PackageCard key={pkg.packageNumber} pkg={pkg} />
+                  ))}
+                  {!data.packages.length && data.legacyTracking && (
+                    <LegacyTrackingCard tracking={data.legacyTracking} />
+                  )}
+                </View>
+              )
             )}
 
             <View style={styles.section}>
