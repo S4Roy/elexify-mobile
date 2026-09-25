@@ -90,7 +90,7 @@ export default function RecentlyViewedScreen() {
               }}
             />
           ) : pending ? (
-            <ProductGridSkeleton />
+            <ProductGridSkeleton gap={16} rowGap={16} />
           ) : null
         }
         ListEmptyComponent={
@@ -100,7 +100,10 @@ export default function RecentlyViewedScreen() {
                 title="Nothing viewed yet"
                 message="Products you open will show up here, so you can find them again easily."
               />
-              <Button label="Explore the store" onPress={() => router.push('/')} />
+              <Button
+                label="Explore the store"
+                onPress={() => router.push('/')}
+              />
             </View>
           ) : missingProducts ? (
             <View style={styles.empty}>

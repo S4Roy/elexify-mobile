@@ -62,7 +62,7 @@ export default function WishlistScreen() {
             retry={() => {
               wishlist.refetch().catch(() => undefined);
             }}
-            skeleton={<ProductGridSkeleton />}
+            skeleton={<ProductGridSkeleton gap={16} rowGap={16} />}
           />
         }
         ListEmptyComponent={
@@ -72,7 +72,10 @@ export default function WishlistScreen() {
                 title="Your wishlist is empty"
                 message="Tap the heart on any product to save it here."
               />
-              <Button label="Explore the store" onPress={() => router.push('/')} />
+              <Button
+                label="Explore the store"
+                onPress={() => router.push('/')}
+              />
             </View>
           ) : null
         }

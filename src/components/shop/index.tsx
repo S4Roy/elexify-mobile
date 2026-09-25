@@ -426,7 +426,15 @@ export const shop = StyleSheet.create({
   },
   skeletonLineWide: { height: 13, width: '92%' },
   skeletonLineMedium: { height: 13, width: '55%' },
-  skeletonGrid: { gap: 12, paddingHorizontal: 16, paddingBottom: 24 },
+  // No side padding: every grid that shows this already pads its content.
+  skeletonGrid: { gap: 12, paddingBottom: 24 },
+  skeletonCount: { height: 13, width: 96, marginBottom: 4 },
+  skeletonCardImage: { backgroundColor: '#E8EBEF' },
+  skeletonCardCategory: { height: 10, width: '45%', marginTop: 4 },
+  skeletonCardName: { gap: 7, minHeight: 40, paddingTop: 2 },
+  skeletonCardPrice: { height: 16, width: '50%' },
+  skeletonCardRating: { height: 14, width: 30 },
+  skeletonCardButton: { height: 30, borderRadius: 8, marginTop: 2 },
   skeletonRow: { flexDirection: 'row', gap: 10 },
   skeletonTile: { flex: 1, maxWidth: '50%' },
   skeletonSummaryCard: {
@@ -1329,6 +1337,8 @@ export function SkeletonBlock({ style }: { style?: StyleProp<ViewStyle> }) {
     <Animated.View style={[shop.skeletonBlock, style, { opacity: pulse }]} />
   );
 }
+/** Mirrors ProductCard row for row (image, category, two-line name, price,
+ * Add button) so the grid doesn't jump when products arrive. */
 function ProductCardSkeleton() {
   return (
     <View
@@ -1336,9 +1346,17 @@ function ProductCardSkeleton() {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <SkeletonBlock style={[shop.productImage, shop.skeletonImage]} />
-      <SkeletonBlock style={shop.skeletonLineWide} />
-      <SkeletonBlock style={shop.skeletonLineMedium} />
+      <SkeletonBlock style={[shop.productImage, shop.skeletonCardImage]} />
+      <SkeletonBlock style={shop.skeletonCardCategory} />
+      <View style={shop.skeletonCardName}>
+        <SkeletonBlock style={shop.skeletonLineWide} />
+        <SkeletonBlock style={shop.skeletonLineMedium} />
+      </View>
+      <View style={shop.priceRatingRow}>
+        <SkeletonBlock style={shop.skeletonCardPrice} />
+        <SkeletonBlock style={shop.skeletonCardRating} />
+      </View>
+      <SkeletonBlock style={shop.skeletonCardButton} />
     </View>
   );
 }
@@ -1372,11 +1390,27 @@ export function CategoryGridSkeleton() {
   );
 }
 /** Two-column shimmering placeholder grid shown while a product list is first loading. */
-export function ProductGridSkeleton() {
+export function ProductGridSkeleton({
+  gap = 10,
+  rowGap = 12,
+  withCount = false,
+}: {
+  /** Match the real list's columnWrapperStyle / contentContainerStyle gaps. */
+  gap?: number;
+  rowGap?: number;
+  /** Placeholder for the "N products" line some lists show above the grid. */
+  withCount?: boolean;
+} = {}) {
   return (
-    <View style={shop.skeletonGrid} accessibilityLabel="Loading products">
+    <View
+      style={[shop.skeletonGrid, { gap: rowGap }]}
+      accessible
+      accessibilityLabel="Loading products"
+      accessibilityState={{ busy: true }}
+    >
+      {withCount && <SkeletonBlock style={shop.skeletonCount} />}
       {[0, 1, 2].map(row => (
-        <View key={row} style={shop.skeletonRow}>
+        <View key={row} style={[shop.skeletonRow, { gap }]}>
           <View style={shop.skeletonTile}>
             <ProductCardSkeleton />
           </View>

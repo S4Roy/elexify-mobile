@@ -203,7 +203,7 @@ export default function CategoryScreen() {
                   />
                 </View>
               ) : (
-                <ProductGridSkeleton />
+                <ProductGridSkeleton withCount />
               )
             ) : (
               <FlatList

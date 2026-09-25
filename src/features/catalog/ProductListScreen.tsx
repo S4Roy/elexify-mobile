@@ -187,7 +187,7 @@ function ProductResults({
               retry={() => {
                 products.refetch().catch(() => undefined);
               }}
-              skeleton={<ProductGridSkeleton />}
+              skeleton={<ProductGridSkeleton withCount />}
             />
             {products.data && (
               <AppText style={shop.muted}>
