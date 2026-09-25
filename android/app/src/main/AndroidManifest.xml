@@ -17,3 +17,32 @@
     </activity>
   </application>
 </manifest>
+      <!-- Android App Links: elexify.online links open the matching screen
+           (mapped in app/+native-intent.tsx). Verified by
+           https://elexify.online/.well-known/assetlinks.json. www is left out
+           because it redirects to the apex and so can't pass verification.
+           /checkout, /login and password-reset pages stay on the web so
+           browser payment callbacks and email flows aren't hijacked. -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="elexify.online"/>
+        <data android:path="/"/>
+        <data android:pathPrefix="/product/"/>
+        <data android:pathPrefix="/products"/>
+        <data android:pathPrefix="/category/"/>
+        <data android:pathPrefix="/product-category/"/>
+        <data android:pathPrefix="/categories"/>
+        <data android:pathPrefix="/cart"/>
+        <data android:pathPrefix="/account"/>
+        <data android:pathPrefix="/track-order"/>
+        <data android:pathPrefix="/compare"/>
+        <data android:pathPrefix="/faq"/>
+        <data android:pathPrefix="/contact-us"/>
+        <data android:pathPrefix="/about-us"/>
+        <data android:pathPrefix="/privacy-policy"/>
+        <data android:pathPrefix="/terms-conditions"/>
+        <data android:pathPrefix="/refund-cancellations-policy"/>
+        <data android:pathPrefix="/page/"/>
+      </intent-filter>
