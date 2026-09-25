@@ -56,6 +56,7 @@ test('website URLs map onto the matching app screens', () => {
     ['https://elexify.online/account/orders/', '/orders'],
     ['https://elexify.online/track-order/', '/orders'],
     ['https://elexify.online/account/wishlist/', '/wishlist'],
+    ['https://elexify.online/account/delete/', '/account/delete'],
     [
       'https://elexify.online/account/communication-preferences/',
       '/account/preferences',

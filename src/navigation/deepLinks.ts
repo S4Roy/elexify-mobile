@@ -112,6 +112,7 @@ export function webUrlToAppPath(input: string): string | null {
     '/account/addresses': '/addresses',
     '/account/recently-viewed': '/recently-viewed',
     '/account/communication-preferences': '/account/preferences',
+    '/account/delete': '/account/delete',
   };
   if (account[path]) {
     return account[path];

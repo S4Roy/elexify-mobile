@@ -136,3 +136,43 @@ export async function updateNotificationPreferences(
     ]),
   };
 }
+
+// ── Account deletion (OTP-confirmed, permanent) ──────────────────────────────
+
+export type DeletionBlocker = { code: string; message: string };
+export type AccountDeletionStatus = {
+  canDelete: boolean;
+  blockers: DeletionBlocker[];
+  otpChannel: 'sms' | 'email' | null;
+  otpDestination: string | null;
+  reasons: string[];
+};
+
+const otpChannel = (value: unknown) => (value === 'sms' || value === 'email' ? value : null);
+
+export async function fetchAccountDeletionStatus(signal?: AbortSignal): Promise<AccountDeletionStatus> {
+  const res = await api.get('user/account/delete', { signal });
+  const d = record(res.data?.data);
+  return {
+    canDelete: d.can_delete === true,
+    blockers: Array.isArray(d.blockers)
+      ? d.blockers.map(b => record(b)).map(b => ({ code: String(b.code ?? ''), message: String(b.message ?? '') }))
+      : [],
+    otpChannel: otpChannel(d.otp_channel),
+    otpDestination: typeof d.otp_destination === 'string' ? d.otp_destination : null,
+    reasons: Array.isArray(d.reasons) ? d.reasons.filter((r): r is string => typeof r === 'string') : [],
+  };
+}
+
+export async function requestAccountDeletion(): Promise<{ otpChannel: 'sms' | 'email' | null; otpDestination: string | null }> {
+  const res = await api.post('user/account/delete/request', {});
+  const d = record(res.data?.data);
+  return {
+    otpChannel: otpChannel(d.otp_channel),
+    otpDestination: typeof d.otp_destination === 'string' ? d.otp_destination : null,
+  };
+}
+
+export async function confirmAccountDeletion(params: { otp: string; reason: string | null }): Promise<void> {
+  await api.post('user/account/delete/confirm', { otp: params.otp, reason: params.reason });
+}

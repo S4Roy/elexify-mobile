@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
 import {
   changePassword,
+  confirmAccountDeletion,
+  fetchAccountDeletionStatus,
+  requestAccountDeletion,
   fetchNotificationPreferences,
   requestEmailChange,
   requestMobileChange,
@@ -97,5 +100,24 @@ export function useUpdateNotificationPreferences() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notification-preferences'] }).catch(() => undefined);
     },
+  });
+}
+
+export function useAccountDeletionStatus() {
+  const status = useSession(s => s.status);
+  return useQuery({
+    queryKey: ['account-deletion'],
+    queryFn: ({ signal }) => fetchAccountDeletionStatus(signal),
+    enabled: !!apiConfig.baseUrl && status === 'authenticated',
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+export function useRequestAccountDeletion() {
+  return useMutation({ mutationFn: () => requestAccountDeletion() });
+}
+export function useConfirmAccountDeletion() {
+  return useMutation({
+    mutationFn: (params: { otp: string; reason: string | null }) => confirmAccountDeletion(params),
   });
 }

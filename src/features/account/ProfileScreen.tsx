@@ -732,6 +732,24 @@ export default function ProfileScreen() {
                   </AppText>
                 </View>
               </Card>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete account"
+                accessibilityHint="Permanently delete your account and personal data"
+                onPress={() => router.push('/account/delete')}
+                style={({ pressed }) => [styles.deleteRow, pressed && styles.pressed]}
+              >
+                <View style={styles.deleteIcon}>
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                </View>
+                <View style={styles.flex}>
+                  <AppText style={styles.deleteTitle}>Delete account</AppText>
+                  <AppText style={styles.deleteText}>
+                    Permanently delete your account and personal data
+                  </AppText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+              </Pressable>
             </>
           )}
         </ScrollView>
@@ -777,6 +795,31 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
+  deleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  deleteIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+  },
+  deleteTitle: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.danger,
+  },
+  deleteText: { fontSize: 12, lineHeight: 17, color: theme.colors.secondary },
   page: { backgroundColor: '#F4F6F8' },
   pressed: { opacity: 0.8 },
   body: { padding: 16, gap: 14, paddingBottom: 28 },
