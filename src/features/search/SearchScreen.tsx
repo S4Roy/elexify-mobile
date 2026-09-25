@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { AppText, Button, Feedback } from '../../components/ui';
+import { AppText, Feedback } from '../../components/ui';
+import { EmptyState } from '../../components/EmptyState';
 import {
   CategoryTile,
   SearchField,
@@ -19,6 +20,8 @@ import {
   shop,
 } from '../../components/shop';
 import { useSearchHistory } from '../../stores/search';
+import { useRecentlyViewed } from '../../stores/recentlyViewed';
+import { useRecentProducts } from '../recentlyViewed/hooks';
 import type { Product } from '../../api/discovery';
 import { uniqueProducts } from '../catalog/filters';
 import { useCategories, useProducts } from '../catalog/hooks';
@@ -110,7 +113,18 @@ export default function SearchScreen() {
   const showSuggestions = query.length >= MIN_CHARS;
 
   const history = useSearchHistory();
-  const categories = useCategories({ featured: 'true', limit: 8 });
+  const featured = useCategories({ featured: 'true', limit: 8 });
+  // Nothing marked featured yet → fall back to the first categories.
+  const noFeatured = featured.isSuccess && featured.data.pages[0].items.length === 0;
+  const allCategories = useCategories({ limit: 8 }, noFeatured);
+  const categories = noFeatured ? allCategories : featured;
+  const categoryList = categories.data?.pages.flatMap(p => p.items) ?? [];
+  const recentIds = useRecentlyViewed(s => s.ids).slice(0, 10);
+  const recent = useRecentProducts(recentIds);
+  // Keep most-recent-first order; the API returns them in its own order.
+  const recentProducts = recentIds
+    .map(id => recent.data?.items.find(p => p.id === id))
+    .filter((p): p is Product => !!p);
   const suggestions = useProducts(
     { search_key: query, limit: SUGGEST_LIMIT },
     showSuggestions,
@@ -183,7 +197,17 @@ export default function SearchScreen() {
                 onRetry={() => suggestions.refetch()}
               />
             ) : results.length === 0 ? (
-              <AppText style={shop.muted}>No results for “{query}”.</AppText>
+              <EmptyState
+                compact
+                icon="search-outline"
+                tone="slate"
+                title={`No results for “${query}”`}
+                text="Check the spelling, try a more general word (like “sensor” instead of a part number), or browse by category."
+                secondary={[
+                  { label: 'Clear search', icon: 'close-circle-outline', onPress: () => setText('') },
+                  { label: 'Categories', icon: 'apps-outline', onPress: () => router.push('/categories') },
+                ]}
+              />
             ) : (
               <>
                 {results.map(product => (
@@ -212,85 +236,159 @@ export default function SearchScreen() {
           </View>
         ) : (
           <>
-            <View style={shop.between}>
-              <AppText style={shop.heading}>Recent searches</AppText>
-              {history.terms.length > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear all recent searches"
-                  onPress={history.clear}
-                  style={styles.clear}
-                >
-                  <AppText style={shop.link}>Clear all</AppText>
-                </Pressable>
-              )}
-            </View>
-            {history.terms.length === 0 ? (
-              <AppText style={shop.muted}>
-                Your searches will appear here.
-              </AppText>
-            ) : (
-              history.terms.map(term => (
-                <View key={term} style={styles.recent}>
+            {history.terms.length > 0 && (
+              <View style={styles.section}>
+                <View style={shop.between}>
+                  <AppText style={styles.sectionTitle}>Recent searches</AppText>
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => setText(term)}
-                    style={styles.recentTap}
+                    accessibilityLabel="Clear all recent searches"
+                    onPress={history.clear}
+                    hitSlop={8}
+                    style={styles.clear}
                   >
-                    <Ionicons
-                      name="time-outline"
-                      size={20}
-                      color={theme.colors.secondary}
-                    />
-                    <AppText style={styles.term}>{term}</AppText>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${term} from recent searches`}
-                    onPress={() => history.remove(term)}
-                    style={styles.removeRecent}
-                  >
-                    <Ionicons
-                      name="close"
-                      size={16}
-                      color={theme.colors.secondary}
-                    />
+                    <AppText style={shop.link}>Clear all</AppText>
                   </Pressable>
                 </View>
-              ))
+                <View style={styles.chips}>
+                  {history.terms.map(term => (
+                    <View key={term} style={styles.recentChip}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Search ${term}`}
+                        onPress={() => search(term)}
+                        style={styles.recentChipTap}
+                      >
+                        <Ionicons name="time-outline" size={15} color={theme.colors.secondary} />
+                        <AppText style={styles.chipText} numberOfLines={1}>
+                          {term}
+                        </AppText>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${term} from recent searches`}
+                        onPress={() => history.remove(term)}
+                        hitSlop={6}
+                        style={styles.chipRemove}
+                      >
+                        <Ionicons name="close" size={14} color={theme.colors.secondary} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              </View>
             )}
-            <AppText style={shop.heading}>Popular categories</AppText>
-            <QueryState
-              pending={categories.isPending}
-              error={categories.error}
-              paused={categories.fetchStatus === 'paused'}
-              retry={() => {
-                categories.refetch().catch(() => undefined);
-              }}
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categories}
-            >
-              {categories.data?.pages
-                .flatMap(p => p.items)
-                .map(c => (
+
+            {categoryList.length > 0 && (
+              <View style={styles.section}>
+                <AppText style={styles.sectionTitle}>Try searching for</AppText>
+                <View style={styles.chips}>
+                  {categoryList.slice(0, 6).map(c => (
+                    <Pressable
+                      key={c.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Search ${c.name}`}
+                      onPress={() => search(c.name)}
+                      style={styles.suggestChip}
+                    >
+                      <Ionicons name="trending-up" size={15} color={theme.colors.primary} />
+                      <AppText style={styles.suggestChipText} numberOfLines={1}>
+                        {c.name}
+                      </AppText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.section}>
+              <View style={shop.between}>
+                <AppText style={styles.sectionTitle}>Popular categories</AppText>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/categories')}
+                  hitSlop={8}
+                  style={styles.seeAll}
+                >
+                  <AppText style={shop.link}>See all</AppText>
+                  <Ionicons name="chevron-forward" size={15} color={theme.colors.primary} />
+                </Pressable>
+              </View>
+              <QueryState
+                pending={categories.isPending}
+                error={categories.error}
+                paused={categories.fetchStatus === 'paused'}
+                retry={() => {
+                  categories.refetch().catch(() => undefined);
+                }}
+                skeleton={
+                  <View style={styles.categoryRow}>
+                    {[0, 1, 2].map(i => (
+                      <SkeletonBlock key={i} style={styles.categorySkeleton} />
+                    ))}
+                  </View>
+                }
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryRow}
+              >
+                {categoryList.map(c => (
                   <View key={c.id} style={styles.category}>
                     <CategoryTile category={c} />
                   </View>
                 ))}
-            </ScrollView>
-            {categories.data?.pages[0].items.length === 0 && (
-              <Feedback
-                title="Explore our collections"
-                message="Browse all categories to find your next project."
-              />
+              </ScrollView>
+            </View>
+
+            {recentProducts.length > 0 && (
+              <View style={styles.section}>
+                <View style={shop.between}>
+                  <AppText style={styles.sectionTitle}>Recently viewed</AppText>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => router.push('/recently-viewed')}
+                    hitSlop={8}
+                    style={styles.seeAll}
+                  >
+                    <AppText style={shop.link}>See all</AppText>
+                    <Ionicons name="chevron-forward" size={15} color={theme.colors.primary} />
+                  </Pressable>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoryRow}
+                >
+                  {recentProducts.map(product => (
+                    <Pressable
+                      key={product.key}
+                      accessibilityRole="link"
+                      accessibilityLabel={product.name}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/products/[slug]',
+                          params: {
+                            slug: product.slug,
+                            ...(product.variationId ? { variation_id: product.variationId } : {}),
+                          },
+                        })
+                      }
+                      style={styles.recentCard}
+                    >
+                      <StoreImage uri={product.image} label={product.name} style={styles.recentImage} />
+                      <AppText numberOfLines={2} style={styles.recentName}>
+                        {product.name}
+                      </AppText>
+                      <AppText style={styles.suggestionPrice}>
+                        {product.price === null ? '—' : money(product.price)}
+                      </AppText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
             )}
-            <Button
-              label="Browse all categories"
-              onPress={() => router.push('/categories')}
-            />
           </>
         )}
       </ScrollView>
@@ -298,18 +396,63 @@ export default function SearchScreen() {
   );
 }
 const styles = StyleSheet.create({
-  recent: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
-  recentTap: { flex: 1, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  removeRecent: {
-    width: 36,
-    height: 36,
+  section: { gap: 12 },
+  sectionTitle: { fontFamily: theme.fonts.semibold, fontSize: 16, lineHeight: 22, color: theme.colors.text },
+  clear: { minHeight: 32, justifyContent: 'center' },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 32 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  recentChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    maxWidth: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
   },
-  term: { flex: 1 },
-  clear: { minHeight: 44, justifyContent: 'center' },
-  categories: { gap: 12 },
-  category: { width: 130 },
+  recentChipTap: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 38,
+    paddingLeft: 12,
+    paddingRight: 4,
+  },
+  chipText: { flexShrink: 1, fontSize: 13, color: theme.colors.text },
+  chipRemove: { width: 30, height: 38, alignItems: 'center', justifyContent: 'center' },
+  suggestChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#F1F9F7',
+    borderWidth: 1,
+    borderColor: '#D5EBE7',
+    maxWidth: '100%',
+  },
+  suggestChipText: { flexShrink: 1, fontSize: 13, color: theme.colors.primary, fontFamily: theme.fonts.medium },
+  categoryRow: { gap: 12 },
+  category: { width: 120 },
+  categorySkeleton: { width: 120, height: 140, borderRadius: 14 },
+  recentCard: {
+    width: 128,
+    gap: 6,
+    padding: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
+  },
+  recentImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  recentName: { fontSize: 12, lineHeight: 16, color: theme.colors.text, minHeight: 32 },
   suggestions: { gap: 4 },
   suggestionsHeader: {
     flexDirection: 'row',

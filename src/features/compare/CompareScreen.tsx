@@ -1,24 +1,34 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { AppText, Button, Feedback, Loading } from '../../components/ui';
+import { AppText, Feedback, Loading } from '../../components/ui';
 import { AddToCartControl, BottomSheet, ShopHeader, StoreImage, money, shop } from '../../components/shop';
 import { fetchProducts, Product } from '../../api/discovery';
 import type { CompareProduct } from '../../api/compare';
 import { theme } from '../../theme';
 import { MAX_COMPARE_PRODUCTS, useCompareStore } from '../../stores/compare';
 import { useCompareProducts } from './hooks';
+import { EmptyState } from '../../components/EmptyState';
 
-const LABEL_WIDTH = 108;
-const COLUMN_WIDTH = 160;
+// Layout: product cards pinned at the top, spec sections scrolling beneath,
+// every row labelled full-width above its values (the Flipkart/Amazon mobile
+// pattern — no label column eating half the screen). Two columns fill the
+// width; with more, the next column peeks in to show it scrolls sideways.
+const GUTTER = 12;
+const GAP = 8;
+
+type Section = 'Overview' | 'Details' | 'Key specifications';
+const SECTIONS: Section[] = ['Overview', 'Details', 'Key specifications'];
 
 type Row = {
   key: string;
   label: string;
-  group?: string;
-  cell: (product: CompareProduct, selectedVariation?: string) => React.ReactNode;
+  section: Section;
+  cell: (product: CompareProduct, selectedVariation?: string) => string;
 };
+
+const norm = (v: string) => v.trim().toLowerCase();
 
 function effective(product: CompareProduct, variationId?: string) {
   const variation = product.variations.find(v => v.id === variationId);
@@ -126,6 +136,8 @@ export default function CompareScreen() {
   const [hideIdentical, setHideIdentical] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickError, setPickError] = useState('');
+  const [areaHeight, setAreaHeight] = useState(0);
+  const { width } = useWindowDimensions();
 
   useEffect(() => {
     if (!compare.data || compare.isPending) {
@@ -138,38 +150,64 @@ export default function CompareScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compare.data]);
 
-  const rows = useMemo((): Row[] => {
-    const fixed: Row[] = [
-      { key: 'brand', label: 'Brand', cell: p => p.brand || '—' },
-      { key: 'sku', label: 'SKU', cell: p => p.sku || '—' },
-      { key: 'category', label: 'Category', cell: p => p.category || '—' },
-      { key: 'weight', label: 'Weight', cell: p => (p.weight ? `${p.weight} kg` : '—') },
-      { key: 'dimensions', label: 'Dimensions', cell: p => p.dimensions || '—' },
+  const allRows = useMemo((): Row[] => {
+    const overview: Row[] = [
+      {
+        key: 'rating',
+        label: 'Customer rating',
+        section: 'Overview',
+        cell: p => (p.totalReviews > 0 ? `★ ${(p.rating ?? 0).toFixed(1)} (${p.totalReviews})` : 'No reviews yet'),
+      },
+      {
+        key: 'discount',
+        label: 'Discount',
+        section: 'Overview',
+        cell: (p, v) => {
+          const eff = effective(p, v);
+          return eff.regularPrice && eff.price !== null && eff.regularPrice > eff.price
+            ? `${Math.round(((eff.regularPrice - eff.price) / eff.regularPrice) * 100)}% off`
+            : '—';
+        },
+      },
+      {
+        key: 'stock',
+        label: 'Availability',
+        section: 'Overview',
+        cell: (p, v) => {
+          const eff = effective(p, v);
+          return eff.inStock ? `In stock${eff.stockQuantity ? ` (${eff.stockQuantity})` : ''}` : 'Out of stock';
+        },
+      },
+    ];
+    const details: Row[] = [
+      { key: 'brand', label: 'Brand', section: 'Details', cell: p => p.brand || '—' },
+      { key: 'category', label: 'Category', section: 'Details', cell: p => p.category || '—' },
+      { key: 'sku', label: 'SKU', section: 'Details', cell: p => p.sku || '—' },
+      { key: 'weight', label: 'Weight', section: 'Details', cell: p => (p.weight ? `${p.weight} kg` : '—') },
+      { key: 'dimensions', label: 'Dimensions', section: 'Details', cell: p => p.dimensions || '—' },
     ];
     const specKeys = new Map<string, string>();
-    products.forEach(p => p.specifications.forEach(s => specKeys.set(s.key, s.label)));
-    const dynamic: Row[] = [...specKeys.entries()].map(([key, label]) => ({
+    products.forEach(p => p.specifications.forEach(sp => specKeys.set(sp.key, sp.label)));
+    const specs: Row[] = [...specKeys.entries()].map(([key, label]) => ({
       key: `spec-${key}`,
       label,
-      group: 'Key Specifications',
+      section: 'Key specifications',
       cell: (p, variationId) => {
-        const candidates = p.specifications.filter(s => s.key === key);
+        const candidates = p.specifications.filter(sp => sp.key === key);
         const spec =
-          candidates.find(s => variationId && s.variationId === variationId) ??
-          candidates.find(s => !s.variationId) ??
+          candidates.find(sp => variationId && sp.variationId === variationId) ??
+          candidates.find(sp => !sp.variationId) ??
           candidates[0];
         return spec?.value || '—';
       },
     }));
-    const all = [...fixed, ...dynamic];
-    if (!hideIdentical || products.length < 2) {
-      return all;
-    }
-    return all.filter(row => {
-      const values = products.map(p => row.cell(p, selectedVariations[p.id]));
-      return new Set(values.map(v => String(v).trim().toLowerCase())).size > 1;
-    });
-  }, [products, hideIdentical, selectedVariations]);
+    return [...overview, ...details, ...specs];
+  }, [products]);
+
+  const differs = (row: Row) =>
+    products.length > 1 &&
+    new Set(products.map(p => norm(row.cell(p, selectedVariations[p.id])))).size > 1;
+  const rows = hideIdentical ? allRows.filter(differs) : allRows;
 
   if (compare.isPending && ids.length > 0) {
     return (
@@ -197,96 +235,120 @@ export default function CompareScreen() {
     return (
       <View style={shop.page}>
         <ShopHeader title="Compare Products" back />
-        <View style={styles.empty}>
-          <Feedback
+        <ScrollView contentContainerStyle={styles.emptyBody}>
+          <EmptyState
+            icon="git-compare-outline"
             title="Nothing to compare yet"
-            message="Add products to compare prices, features, and specifications side by side."
+            text="Pick two or more products to see prices, stock and specifications side by side."
+            steps={[
+              { icon: 'search-outline', title: 'Find a product', text: 'Browse a category or search for the part you need.' },
+              { icon: 'git-compare-outline', title: 'Tap Compare', text: 'On the product page, add it to your comparison.' },
+              { icon: 'layers-outline', title: `Add up to ${MAX_COMPARE_PRODUCTS}`, text: 'Products from the same category compare best.' },
+            ]}
+            primary={{ label: 'Browse products', icon: 'storefront-outline', onPress: () => router.push('/products') }}
+            secondary={[
+              { label: 'Categories', icon: 'apps-outline', onPress: () => router.push('/categories') },
+              { label: 'Recently viewed', icon: 'time-outline', onPress: () => router.push('/recently-viewed') },
+            ]}
           />
-          <Button label="Browse Products" onPress={() => router.push('/')} />
-        </View>
+        </ScrollView>
       </View>
     );
   }
 
+  const canAdd = products.length < MAX_COMPARE_PRODUCTS;
+  const columns = products.length + (canAdd ? 1 : 0);
+  const usable = width - GUTTER * 2 - GAP;
+  const colWidth = Math.floor(columns <= 2 ? usable / 2 : usable / 2.3);
+  const contentWidth = columns * colWidth + (columns - 1) * GAP + GUTTER * 2;
+  const colStyle = { width: colWidth };
+
   return (
     <View style={shop.page}>
-      <ShopHeader title="Compare Products" back />
+      <ShopHeader title="Compare" back />
       <View style={styles.toolbar}>
-        <AppText style={shop.muted}>
-          {products.length} of {MAX_COMPARE_PRODUCTS} products selected
-        </AppText>
+        <View style={shop.flex}>
+          <AppText style={styles.toolbarTitle}>
+            Comparing {products.length} product{products.length === 1 ? '' : 's'}
+          </AppText>
+          {products.length < 2 && (
+            <AppText style={styles.toolbarHint}>Add one more to see differences.</AppText>
+          )}
+        </View>
         <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: hideIdentical }}
-          onPress={() => setHideIdentical(v => !v)}
-          style={styles.hideRow}
+          accessibilityRole="button"
+          accessibilityLabel="Remove all products from comparison"
+          onPress={() => replaceEntries([])}
+          hitSlop={8}
         >
-          <Ionicons
-            name={hideIdentical ? 'checkbox' : 'square-outline'}
-            size={20}
-            color={theme.colors.primary}
-          />
-          <AppText style={shop.muted}>Hide identical specs</AppText>
+          <AppText style={styles.clearAll}>Clear all</AppText>
         </Pressable>
       </View>
+      {products.length > 1 && (
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: hideIdentical }}
+          onPress={() => setHideIdentical(v => !v)}
+          style={styles.diffRow}
+        >
+          <Ionicons name="git-compare-outline" size={16} color={theme.colors.primary} />
+          <AppText style={styles.diffText}>Show only differences</AppText>
+          <Switch
+            value={hideIdentical}
+            onValueChange={setHideIdentical}
+            trackColor={{ true: '#99D5CB', false: '#D1D5DB' }}
+            thumbColor={hideIdentical ? theme.colors.primary : '#FFFFFF'}
+          />
+        </Pressable>
+      )}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator>
-        <View>
-          <View style={styles.row}>
-            <View style={[styles.labelCell, styles.headCell]} />
-            {products.map(product => (
-              <View key={`remove-${product.id}`} style={[styles.cell, styles.headCell]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${product.name} from comparison`}
-                  onPress={() => removeEntry(product.id)}
-                  style={styles.removeButton}
-                >
-                  <Ionicons name="close" size={16} color={theme.colors.danger} />
-                </Pressable>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.labelCell, styles.headLabel]}>
-              <AppText style={styles.rowLabel}>Product</AppText>
-            </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled={contentWidth > width + 1}
+        style={shop.flex}
+        contentContainerStyle={styles.hContent}
+        onLayout={e => setAreaHeight(e.nativeEvent.layout.height)}
+      >
+        <View style={{ width: contentWidth, height: areaHeight || undefined }}>
+          {/* Pinned product cards */}
+          <View style={styles.cardsRow}>
             {products.map(product => {
-              const eff = effective(product, selectedVariations[product.id]);
+              const variationId = selectedVariations[product.id];
+              const eff = effective(product, variationId);
+              const hasDiscount =
+                eff.regularPrice !== null && eff.price !== null && eff.regularPrice > eff.price;
+              const needsVariation = product.variations.length > 0 && !variationId;
               return (
-                <Pressable
-                  key={`title-${product.id}`}
-                  accessibilityRole="link"
-                  accessibilityLabel={`View ${product.name}`}
-                  onPress={() => router.push({ pathname: '/products/[slug]', params: { slug: product.slug } })}
-                  style={styles.cell}
-                >
-                  <StoreImage uri={eff.image} label={product.name} style={styles.productImage} />
-                  <AppText numberOfLines={2} style={styles.productName}>{product.name}</AppText>
-                  {product.totalReviews > 0 ? (
-                    <AppText style={shop.muted}>
-                      ★ {(product.rating ?? 0).toFixed(1)} ({product.totalReviews})
+                <View key={product.id} style={[styles.card, colStyle]}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${product.name} from comparison`}
+                    onPress={() => removeEntry(product.id)}
+                    hitSlop={8}
+                    style={styles.remove}
+                  >
+                    <Ionicons name="close" size={15} color={theme.colors.secondary} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={`View ${product.name}`}
+                    onPress={() => router.push({ pathname: '/products/[slug]', params: { slug: product.slug } })}
+                    style={styles.cardLink}
+                  >
+                    <StoreImage uri={eff.image} label={product.name} style={styles.cardImage} />
+                    <AppText numberOfLines={2} style={styles.cardName}>
+                      {product.name}
                     </AppText>
-                  ) : (
-                    <AppText style={shop.muted}>No reviews yet</AppText>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {products.some(p => p.variations.length > 0) && (
-            <View style={styles.row}>
-              <View style={styles.labelCell}>
-                <AppText style={styles.rowLabel}>Options</AppText>
-              </View>
-              {products.map(product => (
-                <View key={`option-${product.id}`} style={styles.cell}>
-                  {product.variations.length ? (
-                    <View style={styles.optionWrap}>
+                  </Pressable>
+                  <View style={styles.priceLine}>
+                    <AppText style={styles.price}>{eff.price === null ? '—' : money(eff.price)}</AppText>
+                    {hasDiscount && <AppText style={styles.was}>{money(eff.regularPrice!)}</AppText>}
+                  </View>
+                  {product.variations.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionRow}>
                       {product.variations.map(variation => {
-                        const selected = selectedVariations[product.id] === variation.id;
+                        const selected = variationId === variation.id;
                         return (
                           <Pressable
                             key={variation.id}
@@ -306,100 +368,95 @@ export default function CompareScreen() {
                           </Pressable>
                         );
                       })}
-                    </View>
-                  ) : (
-                    <AppText style={shop.muted}>—</AppText>
+                    </ScrollView>
                   )}
-                </View>
-              ))}
-            </View>
-          )}
-
-          <View style={styles.row}>
-            <View style={styles.labelCell}>
-              <AppText style={styles.rowLabel}>Price</AppText>
-            </View>
-            {products.map(product => {
-              const eff = effective(product, selectedVariations[product.id]);
-              const hasDiscount = eff.regularPrice !== null && eff.price !== null && eff.regularPrice > eff.price;
-              return (
-                <View key={`price-${product.id}`} style={styles.cell}>
-                  <AppText style={styles.price}>{eff.price === null ? '—' : money(eff.price)}</AppText>
-                  {hasDiscount && <AppText style={styles.was}>{money(eff.regularPrice!)}</AppText>}
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.labelCell}>
-              <AppText style={styles.rowLabel}>Stock</AppText>
-            </View>
-            {products.map(product => {
-              const eff = effective(product, selectedVariations[product.id]);
-              return (
-                <View key={`stock-${product.id}`} style={styles.cell}>
-                  <AppText style={eff.inStock ? styles.inStock : styles.outOfStock}>
-                    {eff.inStock ? `In stock${eff.stockQuantity ? ` (${eff.stockQuantity})` : ''}` : 'Out of stock'}
-                  </AppText>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.labelCell}>
-              <AppText style={styles.rowLabel}>Action</AppText>
-            </View>
-            {products.map(product => {
-              const variationId = selectedVariations[product.id];
-              const eff = effective(product, variationId);
-              const needsVariation = product.variations.length > 0 && !variationId;
-              return (
-                <View key={`action-${product.id}`} style={styles.cell}>
-                  {needsVariation ? (
-                    <AppText style={shop.muted}>Select an option</AppText>
-                  ) : (
-                    <AddToCartControl
-                      product={{ id: product.id, variationId, name: product.name, inStock: eff.inStock }}
-                      variant="full"
-                    />
-                  )}
-                </View>
-              );
-            })}
-          </View>
-
-          {rows.map((row, index) => (
-            <React.Fragment key={row.key}>
-              {row.group && (index === 0 || rows[index - 1]?.group !== row.group) && (
-                <View style={styles.groupRow}>
-                  <AppText style={styles.groupLabel}>{row.group}</AppText>
-                </View>
-              )}
-              <View style={styles.row}>
-                <View style={styles.labelCell}>
-                  <AppText style={styles.rowLabel}>{row.label}</AppText>
-                </View>
-                {products.map(product => (
-                  <View key={`${row.key}-${product.id}`} style={styles.cell}>
-                    <AppText style={styles.cellValue}>{row.cell(product, selectedVariations[product.id])}</AppText>
+                  <View style={styles.cardAction}>
+                    {!eff.inStock ? (
+                      <View style={styles.oosPill}>
+                        <AppText style={styles.oosText}>Out of stock</AppText>
+                      </View>
+                    ) : needsVariation ? (
+                      <View style={styles.oosPill}>
+                        <AppText style={styles.pickText}>Select an option</AppText>
+                      </View>
+                    ) : (
+                      <AddToCartControl
+                        product={{ id: product.id, variationId, name: product.name, inStock: eff.inStock }}
+                      />
+                    )}
                   </View>
-                ))}
+                </View>
+              );
+            })}
+            {canAdd && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add a product to compare"
+                onPress={() => setPickerOpen(true)}
+                style={({ pressed }) => [styles.card, styles.addCard, colStyle, pressed && styles.pressed]}
+              >
+                <View style={styles.addIcon}>
+                  <Ionicons name="add" size={26} color={theme.colors.primary} />
+                </View>
+                <AppText style={styles.addTitle}>Add product</AppText>
+                <AppText style={styles.addText}>
+                  {MAX_COMPARE_PRODUCTS - products.length} more can be added
+                </AppText>
+              </Pressable>
+            )}
+          </View>
+          {!!pickError && <AppText style={styles.pickError}>{pickError}</AppText>}
+
+          {/* Specs */}
+          <ScrollView style={shop.flex} contentContainerStyle={styles.specs} showsVerticalScrollIndicator={false}>
+            {rows.length === 0 && (
+              <View style={styles.sameNote}>
+                <Ionicons name="checkmark-done-outline" size={18} color={theme.colors.primary} />
+                <AppText style={styles.sameText}>These products have identical specifications.</AppText>
               </View>
-            </React.Fragment>
-          ))}
+            )}
+            {SECTIONS.map(section => {
+              const sectionRows = rows.filter(r => r.section === section);
+              if (!sectionRows.length) {
+                return null;
+              }
+              return (
+                <View key={section} style={styles.section}>
+                  <AppText style={styles.sectionTitle}>{section}</AppText>
+                  {sectionRows.map(row => {
+                    const highlight = !hideIdentical && differs(row);
+                    return (
+                      <View key={row.key} style={[styles.specRow, highlight && styles.specRowDiff]}>
+                        <AppText style={styles.specLabel}>{row.label}</AppText>
+                        <View style={styles.specValues}>
+                          {products.map(product => {
+                            const value = row.cell(product, selectedVariations[product.id]);
+                            const isStock = row.key === 'stock';
+                            return (
+                              <AppText
+                                key={product.id}
+                                style={[
+                                  styles.specValue,
+                                  colStyle,
+                                  value === '—' && styles.specEmpty,
+                                  isStock && (value.startsWith('In stock') ? styles.inStock : styles.outOfStock),
+                                ]}
+                              >
+                                {value}
+                              </AppText>
+                            );
+                          })}
+                          {canAdd && <View style={colStyle} />}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </ScrollView>
         </View>
       </ScrollView>
-
-      <View style={styles.footer}>
-        {!!pickError && <AppText style={styles.outOfStock}>{pickError}</AppText>}
-        <Button
-          label="Add Product to Compare"
-          disabled={products.length >= MAX_COMPARE_PRODUCTS}
-          onPress={() => setPickerOpen(true)}
-        />
-      </View>
 
       {pickerOpen && (
         <ProductPicker
@@ -421,50 +478,75 @@ export default function CompareScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
+  pressed: { opacity: 0.85 },
+  emptyBody: { flexGrow: 1, justifyContent: 'center', padding: 20 },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    gap: 12,
+    paddingHorizontal: GUTTER + 4,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  hideRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  empty: { padding: 20, gap: 16 },
-  row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  labelCell: {
-    width: LABEL_WIDTH,
-    padding: 10,
-    justifyContent: 'center',
-    backgroundColor: '#FAFBFB',
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
-  },
-  headCell: { width: COLUMN_WIDTH, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  headLabel: { justifyContent: 'flex-end' },
-  cell: {
-    width: COLUMN_WIDTH,
-    padding: 10,
+  toolbarTitle: { fontFamily: theme.fonts.semibold, fontSize: 15, color: theme.colors.text },
+  toolbarHint: { fontSize: 12, color: theme.colors.secondary, marginTop: 1 },
+  clearAll: { color: theme.colors.danger, fontFamily: theme.fonts.semibold, fontSize: 13 },
+  diffRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
-    gap: 4,
+    gap: 8,
+    marginHorizontal: GUTTER,
+    marginBottom: 8,
+    paddingLeft: 12,
+    paddingRight: 6,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: '#F1F9F7',
   },
-  rowLabel: { fontFamily: theme.fonts.medium, fontSize: 12 },
-  cellValue: { fontSize: 13, textAlign: 'center' },
-  removeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  diffText: { flex: 1, fontSize: 13, fontFamily: theme.fonts.medium, color: theme.colors.text },
+  hContent: { paddingHorizontal: GUTTER },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: GAP,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  card: {
+    padding: 10,
+    paddingTop: 12,
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#FFFFFF',
+  },
+  remove: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 1,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FDECEC',
+    backgroundColor: '#F3F4F6',
   },
-  productImage: { width: 88, height: 88, borderRadius: 8, backgroundColor: '#F0F1F3' },
-  productName: { fontFamily: theme.fonts.medium, fontSize: 13, textAlign: 'center' },
-  optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center' },
+  cardLink: { gap: 6 },
+  cardImage: {
+    width: 76,
+    height: 76,
+    alignSelf: 'center',
+    borderRadius: 10,
+    backgroundColor: '#F5F6F8',
+  },
+  cardName: { fontFamily: theme.fonts.medium, fontSize: 13, lineHeight: 18, minHeight: 36, color: theme.colors.text },
+  priceLine: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 6 },
+  price: { fontFamily: theme.fonts.semibold, fontSize: 16, color: theme.colors.text },
+  was: { fontSize: 12, color: theme.colors.secondary, textDecorationLine: 'line-through' },
+  optionRow: { gap: 6 },
   optionChip: {
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -472,21 +554,73 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  optionChipSelected: { borderColor: theme.colors.primary },
+  optionChipSelected: { borderColor: theme.colors.primary, backgroundColor: '#F1F9F7' },
   optionChipText: { fontSize: 11 },
-  price: { fontFamily: theme.fonts.semibold, fontSize: 15 },
-  was: { fontSize: 11, color: theme.colors.secondary, textDecorationLine: 'line-through' },
-  inStock: { color: '#1B8A5A', fontFamily: theme.fonts.medium, fontSize: 12 },
-  outOfStock: { color: theme.colors.danger, fontFamily: theme.fonts.medium, fontSize: 12 },
-  groupRow: { backgroundColor: '#F2F8F7', paddingHorizontal: 16, paddingVertical: 6 },
-  groupLabel: {
+  cardAction: { marginTop: 'auto', paddingTop: 2 },
+  oosPill: {
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F6F8',
+  },
+  oosText: { fontSize: 12, fontFamily: theme.fonts.medium, color: theme.colors.danger },
+  pickText: { fontSize: 12, fontFamily: theme.fonts.medium, color: theme.colors.secondary },
+  addCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderColor: '#99D5CB',
+    backgroundColor: '#F7FBFA',
+  },
+  addIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D5EBE7',
+  },
+  addTitle: { fontFamily: theme.fonts.semibold, fontSize: 14, color: theme.colors.primary },
+  addText: { fontSize: 11, color: theme.colors.secondary, textAlign: 'center' },
+  pickError: { color: theme.colors.danger, fontSize: 12, paddingVertical: 6 },
+  specs: { paddingBottom: 32 },
+  section: { paddingTop: 16 },
+  sectionTitle: {
     fontFamily: theme.fonts.semibold,
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: theme.colors.primary,
+    paddingBottom: 6,
   },
-  footer: { padding: 16, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  specRow: {
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  specRowDiff: { backgroundColor: '#FFFBEB', borderRadius: 8 },
+  specLabel: { fontSize: 12, color: theme.colors.secondary, fontFamily: theme.fonts.medium },
+  specValues: { flexDirection: 'row', gap: GAP },
+  specValue: { fontSize: 14, lineHeight: 20, color: theme.colors.text },
+  specEmpty: { color: '#9CA3AF' },
+  inStock: { color: '#15803D', fontFamily: theme.fonts.medium },
+  outOfStock: { color: theme.colors.danger, fontFamily: theme.fonts.medium },
+  sameNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#F1F9F7',
+  },
+  sameText: { flex: 1, fontSize: 13, color: theme.colors.text },
   pickerSearch: {
     flexDirection: 'row',
     alignItems: 'center',
