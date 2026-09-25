@@ -101,8 +101,10 @@ export function CancelOrderSheet({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.shrink}
       >
         <ScrollView
+          style={styles.shrink}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
         >
@@ -181,6 +183,7 @@ export function CancelOrderSheet({
 }
 
 const styles = StyleSheet.create({
+  shrink: { flexShrink: 1 },
   body: { paddingHorizontal: 20, paddingBottom: 12, gap: 12 },
   impact: {
     flexDirection: 'row',

@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { Image as RNImage, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Image as RNImage,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
@@ -13,7 +20,13 @@ import { useSubmitReturn } from './hooks';
 
 const MAX_IMAGES = 5;
 
-export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onClose: () => void }) {
+export function ReturnRequestSheet({
+  order,
+  onClose,
+}: {
+  order: OrderDetail;
+  onClose: () => void;
+}) {
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [returnType, setReturnType] = useState<ReturnType>('refund');
   const [reason, setReason] = useState('');
@@ -73,16 +86,24 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
       return;
     }
     submit.mutate(
-      { items, returnType, reason, comment: comment.trim() || undefined, images, submissionKey },
+      {
+        items,
+        returnType,
+        reason,
+        comment: comment.trim() || undefined,
+        images,
+        submissionKey,
+      },
       { onSuccess: onClose, onError: err => setError(err.message) },
     );
   };
 
   return (
     <BottomSheet title="Request a return" onClose={onClose}>
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView style={styles.shrink} contentContainerStyle={styles.body}>
         <AppText style={shop.muted}>
-          Select the items and quantities to return. Requests are reviewed before pickup or refund.
+          Select the items and quantities to return. Requests are reviewed
+          before pickup or refund.
         </AppText>
 
         {order.items.map(item => {
@@ -94,7 +115,10 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
               accessibilityRole="checkbox"
               accessibilityState={{ checked: qty > 0 }}
               onPress={() =>
-                setSelected(current => ({ ...current, [item.id]: current[item.id] ? 0 : max }))
+                setSelected(current => ({
+                  ...current,
+                  [item.id]: current[item.id] ? 0 : max,
+                }))
               }
               style={styles.itemRow}
             >
@@ -113,22 +137,36 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
                     accessibilityRole="button"
                     accessibilityLabel="Decrease quantity"
                     onPress={() =>
-                      setSelected(current => ({ ...current, [item.id]: Math.max(1, qty - 1) }))
+                      setSelected(current => ({
+                        ...current,
+                        [item.id]: Math.max(1, qty - 1),
+                      }))
                     }
                     style={styles.stepperButton}
                   >
-                    <Ionicons name="remove" size={16} color={theme.colors.primary} />
+                    <Ionicons
+                      name="remove"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
                   </Pressable>
                   <AppText style={styles.stepperValue}>{qty}</AppText>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Increase quantity"
                     onPress={() =>
-                      setSelected(current => ({ ...current, [item.id]: Math.min(max, qty + 1) }))
+                      setSelected(current => ({
+                        ...current,
+                        [item.id]: Math.min(max, qty + 1),
+                      }))
                     }
                     style={styles.stepperButton}
                   >
-                    <Ionicons name="add" size={16} color={theme.colors.primary} />
+                    <Ionicons
+                      name="add"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
                   </Pressable>
                 </View>
               )}
@@ -138,7 +176,11 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
 
         <AppText style={styles.label}>Resolution</AppText>
         <View style={styles.wrap}>
-          <Chip label="Refund" selected={returnType === 'refund'} onPress={() => setReturnType('refund')} />
+          <Chip
+            label="Refund"
+            selected={returnType === 'refund'}
+            onPress={() => setReturnType('refund')}
+          />
           <Chip
             label="Replacement"
             selected={returnType === 'replacement'}
@@ -146,15 +188,21 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
           />
         </View>
         <AppText style={shop.muted}>
-          Return window: {order.returns.windowDays} days after delivery. Refunds cover accepted
-          merchandise after discounts; shipping and COD fees are excluded. Replacements are arranged
-          after quality check, subject to stock.
+          Return window: {order.returns.windowDays} days after delivery. Refunds
+          cover accepted merchandise after discounts; shipping and COD fees are
+          excluded. Replacements are arranged after quality check, subject to
+          stock.
         </AppText>
 
         <AppText style={styles.label}>Reason</AppText>
         <View style={styles.wrap}>
           {order.returns.reasons.map(option => (
-            <Chip key={option} label={option} selected={reason === option} onPress={() => setReason(option)} />
+            <Chip
+              key={option}
+              label={option}
+              selected={reason === option}
+              onPress={() => setReason(option)}
+            />
           ))}
         </View>
 
@@ -172,7 +220,8 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
         />
 
         <AppText style={styles.label}>
-          Supporting images {order.returns.requireImages ? '(required)' : '(optional)'}
+          Supporting images{' '}
+          {order.returns.requireImages ? '(required)' : '(optional)'}
         </AppText>
         <View style={styles.images}>
           {images.map((image, index) => (
@@ -181,7 +230,9 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Remove image"
-                onPress={() => setImages(current => current.filter((_, i) => i !== index))}
+                onPress={() =>
+                  setImages(current => current.filter((_, i) => i !== index))
+                }
                 style={styles.imageRemove}
               >
                 <Ionicons name="close" size={12} color="#FFFFFF" />
@@ -195,7 +246,11 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
               onPress={pickImages}
               style={styles.imageAdd}
             >
-              <Ionicons name="camera-outline" size={22} color={theme.colors.primary} />
+              <Ionicons
+                name="camera-outline"
+                size={22}
+                color={theme.colors.primary}
+              />
             </Pressable>
           )}
         </View>
@@ -206,7 +261,11 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
           onPress={() => setConfirmed(v => !v)}
           style={styles.confirmRow}
         >
-          <Ionicons name={confirmed ? 'checkbox' : 'square-outline'} size={20} color={theme.colors.primary} />
+          <Ionicons
+            name={confirmed ? 'checkbox' : 'square-outline'}
+            size={20}
+            color={theme.colors.primary}
+          />
           <AppText style={[shop.muted, shop.flex]}>
             I confirm the selected items, quantities and return reason.
           </AppText>
@@ -225,8 +284,14 @@ export function ReturnRequestSheet({ order, onClose }: { order: OrderDetail; onC
 }
 
 const styles = StyleSheet.create({
+  shrink: { flexShrink: 1 },
   body: { paddingBottom: 8, gap: 12 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stepperButton: {
     width: 28,
@@ -237,7 +302,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepperValue: { minWidth: 18, textAlign: 'center', fontFamily: theme.fonts.medium },
+  stepperValue: {
+    minWidth: 18,
+    textAlign: 'center',
+    fontFamily: theme.fonts.medium,
+  },
   label: { fontFamily: theme.fonts.medium, fontSize: 13, marginTop: 4 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   textArea: {
@@ -253,7 +322,12 @@ const styles = StyleSheet.create({
   },
   images: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   imageThumbWrap: { width: 64, height: 64 },
-  imageThumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#F0F1F3' },
+  imageThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: '#F0F1F3',
+  },
   imageRemove: {
     position: 'absolute',
     top: -6,
@@ -275,6 +349,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  confirmRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
+  confirmRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 4,
+  },
   error: { color: theme.colors.danger },
 });

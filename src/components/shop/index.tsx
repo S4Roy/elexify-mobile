@@ -653,6 +653,7 @@ export const shop = StyleSheet.create({
     marginBottom: 2,
   },
   sheetHeader: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 6 },
+  sheetBody: { flexShrink: 1 },
   sheetFooter: {
     paddingHorizontal: 20,
     paddingTop: 12,
@@ -1879,7 +1880,11 @@ export function BottomSheet({
               onPress={close}
             />
           </View>
-          {renderSheetContent(children, close)}
+          {/* Shrinks (and lets a scrolling child scroll) once the sheet hits
+              its max height, so the footer actions always stay on screen. */}
+          <View style={shop.sheetBody}>
+            {renderSheetContent(children, close)}
+          </View>
           {footer && (
             <View style={[shop.row, shop.sheetFooter]}>
               {renderSheetContent(footer, close)}
