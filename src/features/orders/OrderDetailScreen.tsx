@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -42,6 +42,7 @@ import {
 } from './hooks';
 import { TrackingSummaryCard } from './TrackingViews';
 import { CancelOrderSheet } from './CancelOrderSheet';
+import { PaymentRetryCard } from './PaymentRetryCard';
 import { cancellationOutcome, refundSteps } from './cancellation';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
 
@@ -298,13 +299,6 @@ export default function OrderDetailScreen() {
   > | null>(null);
   const [returning, setReturning] = useState(false);
 
-  // Ticks so the retry-window gate (canRetryPayment below) flips off live
-  // once the hour elapses, instead of only re-checking on the next refetch.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
   const retryPayment = useRetryPayment();
   const verifyPayment = useVerifyPayment();
   const [retrying, setRetrying] = useState(false);
@@ -318,12 +312,13 @@ export default function OrderDetailScreen() {
       (data.paymentMethod === 'cod' && data.isPartialCod)) &&
     ['pending', 'failed'].includes(data.paymentStatus) &&
     data.orderStatus === 'pending';
-  const canRetryPayment =
-    hasUnpaidOnlinePayment &&
-    Number.isFinite(retryExpiresAt) &&
-    now < retryExpiresAt;
-
+  // PaymentRetryCard runs the live countdown and swaps to its closed state at
+  // the deadline; this re-check only guards a tap racing that moment.
   const onRetryPayment = async () => {
+    const canRetryPayment =
+      hasUnpaidOnlinePayment &&
+      Number.isFinite(retryExpiresAt) &&
+      Date.now() < retryExpiresAt;
     if (!canRetryPayment || !data || retrying) {
       return;
     }
@@ -487,38 +482,13 @@ export default function OrderDetailScreen() {
                 </View>
               </View>
               <AppText style={shop.muted}>
-                {data.paymentMethod === 'cod'
-                  ? 'Cash on delivery'
-                  : 'Paid online'}{' '}
+                {data.paymentMethod !== 'cod'
+                  ? 'Online payment'
+                  : data.isPartialCod
+                  ? 'Partial Cash on Delivery'
+                  : 'Cash on Delivery'}{' '}
                 · Placed on {formatDate(data.createdAt)}
               </AppText>
-              {canRetryPayment && (
-                <View style={styles.retryButtonWrap}>
-                  <Button
-                    label={retrying ? 'Opening payment…' : 'Retry payment'}
-                    disabled={retrying}
-                    icon={
-                      <Ionicons name="card-outline" size={16} color="#FFFFFF" />
-                    }
-                    onPress={onRetryPayment}
-                  />
-                </View>
-              )}
-              {!!retryError && (
-                <AppText style={styles.error}>{retryError}</AppText>
-              )}
-              {hasUnpaidOnlinePayment && (
-                <AppText style={shop.muted}>
-                  {canRetryPayment
-                    ? `Payment can be retried until ${new Date(
-                        retryExpiresAt,
-                      ).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}.`
-                    : 'The one-hour payment retry window has expired. Please place a new order.'}
-                </AppText>
-              )}
               {canDownloadInvoice(data) && (
                 <Pressable
                   accessibilityRole="button"
@@ -544,6 +514,23 @@ export default function OrderDetailScreen() {
                 </AppText>
               )}
             </View>
+
+            {hasUnpaidOnlinePayment && (
+              <PaymentRetryCard
+                amount={
+                  data.isPartialCod
+                    ? data.advanceAmount ?? data.grandTotal
+                    : data.grandTotal
+                }
+                isAdvance={data.isPartialCod}
+                failed={data.paymentStatus === 'failed'}
+                placedAt={new Date(data.createdAt).getTime()}
+                windowMs={RETRY_WINDOW_MS}
+                retrying={retrying}
+                error={retryError}
+                onPay={onRetryPayment}
+              />
+            )}
 
             {data.cancelled && <CancellationCard order={data} />}
 
@@ -919,7 +906,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.semibold,
     fontSize: 15,
   },
-  retryButtonWrap: { marginTop: 6 },
   receiptButton: {
     flexDirection: 'row',
     alignItems: 'center',
