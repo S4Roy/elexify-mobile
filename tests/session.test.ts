@@ -1,6 +1,8 @@
+jest.mock('../src/api/sessionTransport', () => ({ revokeCurrentSession: jest.fn().mockResolvedValue(undefined), refreshSessionToken: jest.fn() }));
 jest.mock('../src/platform/session', () => ({
   sessionStorage: {
     readToken: jest.fn(),
+    removeRefresh: jest.fn().mockResolvedValue(undefined),
     guestId: jest.fn(),
     writeToken: jest.fn(),
     removeToken: jest.fn(),

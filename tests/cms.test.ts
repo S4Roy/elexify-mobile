@@ -9,8 +9,21 @@ test('parseCmsPage reads title and content, and defaults missing content to empt
   expect(parseCmsPage({ title: 'Privacy Policy', content: '<p>We respect your data.</p>' })).toEqual({
     title: 'Privacy Policy',
     content: '<p>We respect your data.</p>',
+    shortDescription: '',
   });
-  expect(parseCmsPage({ title: 'About Us' })).toEqual({ title: 'About Us', content: '' });
+  expect(parseCmsPage({ title: 'About Us' })).toEqual({
+    title: 'About Us',
+    content: '',
+    shortDescription: '',
+  });
+});
+
+test('parseCmsPage maps the API short description for display', () => {
+  expect(parseCmsPage({ title: 'About Us', short_description: 'Our story' })).toEqual({
+    title: 'About Us',
+    content: '',
+    shortDescription: 'Our story',
+  });
 });
 
 test('parseCmsPage rejects a response with no readable title', () => {

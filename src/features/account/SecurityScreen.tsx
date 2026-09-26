@@ -1,3 +1,5 @@
+import { DevicesCard } from './DevicesCard';
+import { useSession } from '../../stores/session';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -625,6 +627,7 @@ function PasswordCard() {
         onSuccess: () => {
           close();
           setSuccess(true);
+          void useSession.getState().signOut(true);
         },
         onError: err => setError(err.message),
       },
@@ -795,6 +798,7 @@ export default function SecurityScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <DevicesCard />
           <QueryState
             pending={account.isPending}
             error={account.error}

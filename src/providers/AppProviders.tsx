@@ -11,9 +11,14 @@ import { useShopping } from '../stores/shopping';
 import { useSession } from '../stores/session';
 import { AppText, Feedback, Loading, Screen } from '../components/ui';
 import { ConfirmProvider } from '../components/ui/ConfirmDialog';
-import { ApiError } from '../api/client';
+import { ApiError, api } from '../api/client';
 import { theme } from '../theme';
 
+function sessionIdentity(token: string | null) {
+  if (!token) return null;
+  try { const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return claims.sub || claims.user_id; }
+  catch { return token; }
+}
 export function AppProviders({ children }: React.PropsWithChildren) {
   const [client] = useState(
     () =>
@@ -39,7 +44,7 @@ export function AppProviders({ children }: React.PropsWithChildren) {
   useEffect(() => {
     const unsubscribe = useSession.subscribe((state, previous) => {
       if (
-        state.token !== previous.token ||
+        sessionIdentity(state.token) !== sessionIdentity(previous.token) ||
         state.guestId !== previous.guestId
       ) {
         client.cancelQueries().catch(() => undefined);
@@ -57,7 +62,13 @@ export function AppProviders({ children }: React.PropsWithChildren) {
     const subscription = AppState.addEventListener('change', state =>
       focusManager.setFocused(state === 'active'),
     );
+    const heartbeat = setInterval(() => {
+      if (AppState.currentState === 'active' && useSession.getState().status === 'authenticated' && onlineManager.isOnline()) {
+        void api.get('auth/user/presence').catch(() => undefined);
+      }
+    }, 60000);
     return () => {
+      clearInterval(heartbeat);
       unsubscribe();
       unsubscribeNetwork();
       subscription.remove();

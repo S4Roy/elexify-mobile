@@ -4,8 +4,8 @@ jest.mock('../src/api/config', () => ({
     publicKey: 'public-client-key',
   },
 }));
-jest.mock('../src/platform/session', () => ({ sessionStorage: {} }));
-import { AxiosHeaders } from 'axios';
+jest.mock('../src/platform/session', () => ({ sessionStorage: { deviceId: jest.fn().mockResolvedValue("device-a") } }));
+import { AxiosHeaders, AxiosError } from 'axios';
 import { api } from '../src/api/client';
 import { useSession } from '../src/stores/session';
 import { parseCatalogPreview } from '../src/api/catalog';
@@ -57,10 +57,11 @@ const expiredAdapter = async (config: any) => ({
   headers: new AxiosHeaders({ 'x-session-expired': '1' }),
   config,
 });
-test('a session-expired response signs out the session that sent it', async () => {
+test('a rejected refresh signs out the session that sent it', async () => {
   const signOut = jest.fn().mockResolvedValue(undefined);
-  useSession.setState({ signOut });
-  await api.get('products', { adapter: expiredAdapter });
+  const error = new AxiosError('expired', undefined, undefined, undefined, { status: 401 } as any);
+  useSession.setState({ signOut, refreshToken: jest.fn().mockRejectedValue(error) });
+  await expect(api.get('products', { adapter: expiredAdapter })).rejects.toThrow('expired');
   expect(signOut).toHaveBeenCalledTimes(1);
 });
 test('a session-expired response for an older session is ignored', async () => {
@@ -95,4 +96,23 @@ test('malformed product responses are errors, not empty catalogs', () => {
   expect(parseCatalogPreview([{ _id: 'a', name: 'Board' }])).toEqual([
     { id: 'a', name: 'Board' },
   ]);
+});
+
+test('refresh succeeds before retrying the original request', async () => {
+  const refreshToken = jest.fn(async () => { useSession.setState({ token: 'renewed-token' }); return 'renewed-token'; });
+  useSession.setState({ refreshToken });
+  let attempts = 0;
+  const response = await api.get('products', { adapter: async config => {
+    attempts++;
+    return { ...await expiredAdapter(config), headers: new AxiosHeaders(attempts === 1 ? { 'x-session-expired': '1' } : {}), data: { ok: true } };
+  } });
+  expect(refreshToken).toHaveBeenCalledTimes(1);
+  expect(attempts).toBe(2);
+  expect(response.data.ok).toBe(true);
+});
+test('network failure during refresh preserves the session', async () => {
+  const signOut = jest.fn();
+  useSession.setState({ signOut, refreshToken: jest.fn().mockRejectedValue(new AxiosError('offline')) });
+  await expect(api.get('products', { adapter: expiredAdapter })).rejects.toThrow('offline');
+  expect(signOut).not.toHaveBeenCalled();
 });
