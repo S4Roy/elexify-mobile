@@ -22,6 +22,7 @@ import { enablePush } from './PushProvider';
 //   foreground, token refresh), and logout unregisters the device.
 
 const STORAGE_KEY = 'push.optin';
+const DENIED_KEY = 'push.permission-denied';
 const COOLDOWN_DAYS = 14;
 const MAX_DISMISSALS = 3;
 
@@ -62,7 +63,17 @@ export function usePushOptIn({ throttled }: { throttled: boolean }) {
 
   const refresh = useCallback(() => {
     pushPermissionStatus()
-      .then(setPermission)
+      .then(status => {
+        setPermission(status);
+        if (status === 'granted') {
+          setBlocked(false);
+          AsyncStorage.removeItem(DENIED_KEY).catch(() => undefined);
+        } else if (status === 'denied') {
+          AsyncStorage.getItem(DENIED_KEY)
+            .then(value => setBlocked(value === 'true'))
+            .catch(() => setBlocked(false));
+        }
+      })
       .catch(() => setPermission('unavailable'));
   }, []);
 
@@ -90,8 +101,16 @@ export function usePushOptIn({ throttled }: { throttled: boolean }) {
       await enablePush();
       refresh();
     } catch {
-      // Denied, or "don't ask again": only system settings can undo it now.
-      setBlocked(true);
+      // Never loop the native prompt after a denial. Bring the user to the
+      // platform settings from their next explicit opt-in action instead.
+      const status = await pushPermissionStatus().catch(
+        () => 'unavailable' as const,
+      );
+      setPermission(status);
+      if (status === 'denied') {
+        setBlocked(true);
+        AsyncStorage.setItem(DENIED_KEY, 'true').catch(() => undefined);
+      }
     } finally {
       setBusy(false);
     }
@@ -126,18 +145,24 @@ export function usePushOptIn({ throttled }: { throttled: boolean }) {
 
 type Variant = 'order' | 'inbox' | 'settings';
 
-const COPY: Record<Variant, { title: string; text: string }> = {
+const COPY: Record<
+  Variant,
+  { title: string; text: string; benefits: string[] }
+> = {
   order: {
-    title: 'Get updates on this order',
-    text: "We'll let you know when it ships, when it's out for delivery and if anything needs your attention.",
+    title: 'Stay updated on your order',
+    text: 'Get useful delivery updates at the right time. Promotional offers are optional and managed separately in Notification Preferences.',
+    benefits: ['When your order ships', 'When delivery is nearby'],
   },
   inbox: {
-    title: 'Never miss an update',
-    text: 'Get alerts when your order ships, is out for delivery or has a payment update.',
+    title: 'Take order updates with you',
+    text: 'Allow timely order alerts. Promotional messages stay off unless you opt in under Offers & discounts in Notification Preferences.',
+    benefits: ['Shipping and delivery progress', 'Important order alerts'],
   },
   settings: {
-    title: 'Notifications are off on this phone',
-    text: 'Turn them on to receive the push notifications you choose below.',
+    title: 'Get updates on this phone',
+    text: 'Turn on notifications for this device. Promotional offers are optional; opt in separately using Offers & discounts — Push below.',
+    benefits: ['Delivery milestones', 'Payment and order updates'],
   },
 };
 
@@ -161,13 +186,15 @@ export function PushOptInCard({
       <View style={styles.head}>
         <View style={styles.icon}>
           <Ionicons
-            name="notifications"
-            size={20}
+            name={
+              blocked ? 'notifications-off-outline' : 'notifications-outline'
+            }
+            size={22}
             color={theme.colors.primary}
           />
         </View>
         <View style={shop.flex}>
-          <AppText style={styles.title}>
+          <AppText accessibilityRole="header" style={styles.title}>
             {blocked ? 'Notifications are blocked' : copy.title}
           </AppText>
           <AppText style={styles.text}>
@@ -177,9 +204,24 @@ export function PushOptInCard({
           </AppText>
         </View>
       </View>
+      {!blocked && (
+        <View style={styles.benefits}>
+          {copy.benefits.map(benefit => (
+            <View key={benefit} style={styles.benefit}>
+              <Ionicons
+                name="checkmark-circle"
+                size={17}
+                color={theme.colors.primary}
+              />
+              <AppText style={styles.benefitText}>{benefit}</AppText>
+            </View>
+          ))}
+        </View>
+      )}
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Not now. You can keep using the app without notifications."
           onPress={dismiss}
           style={({ pressed }) => [styles.later, pressed && styles.pressed]}
         >
@@ -187,6 +229,7 @@ export function PushOptInCard({
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: busy }}
           disabled={busy}
           onPress={turnOn}
           style={({ pressed }) => [
@@ -195,7 +238,11 @@ export function PushOptInCard({
           ]}
         >
           <AppText style={styles.primaryText}>
-            {busy ? 'Turning on…' : blocked ? 'Open settings' : 'Turn on'}
+            {busy
+              ? 'Turning on…'
+              : blocked
+                ? 'Open settings'
+                : 'Enable notifications'}
           </AppText>
         </Pressable>
       </View>
@@ -207,54 +254,67 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   card: {
     alignSelf: 'stretch',
-    gap: 14,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#F1F9F7',
+    gap: 16,
+    padding: 18,
+    borderRadius: 18,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: '#D5EBE7',
+    borderColor: theme.colors.primaryLight,
+    shadowColor: theme.colors.primaryDark,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  head: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  head: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.primaryLight,
   },
   title: {
     fontFamily: theme.fonts.semibold,
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 16,
+    lineHeight: 23,
     color: theme.colors.text,
   },
   text: {
-    marginTop: 2,
+    marginTop: 4,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     color: theme.colors.secondary,
   },
-  actions: { flexDirection: 'row', gap: 10 },
+  benefits: { gap: 9, paddingLeft: 2 },
+  benefit: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  benefitText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: theme.colors.text,
+  },
+  actions: { flexDirection: 'row', gap: 10, paddingTop: 2 },
   later: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 12,
+    minHeight: 48,
+    borderRadius: theme.radius.button,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#B2DFDB',
-    backgroundColor: '#FFFFFF',
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
   laterText: {
-    color: theme.colors.primary,
-    fontFamily: theme.fonts.semibold,
+    color: theme.colors.secondary,
+    fontFamily: theme.fonts.medium,
     fontSize: 14,
   },
   primary: {
-    flex: 1.4,
-    minHeight: 44,
-    borderRadius: 12,
+    flex: 1.5,
+    minHeight: 48,
+    borderRadius: theme.radius.button,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.primary,
@@ -262,6 +322,6 @@ const styles = StyleSheet.create({
   primaryText: {
     color: '#FFFFFF',
     fontFamily: theme.fonts.semibold,
-    fontSize: 14,
+    fontSize: 13,
   },
 });
