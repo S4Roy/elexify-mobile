@@ -197,6 +197,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				F6B398C1026C43E28D8E0F1A /* Prepare Firebase configuration */,
 				D4FE0AA8EC8330D0B8F6D966 /* [CP-User] [RNFB] Core Configuration */,
 			);
 			buildRules = (
@@ -380,6 +381,24 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Elexify/Pods-Elexify-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		F6B398C1026C43E28D8E0F1A /* Prepare Firebase configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(PROJECT_DIR)/Elexify/GoogleService-Info-development.plist",
+				"$(PROJECT_DIR)/Elexify/GoogleService-Info.plist",
+			);
+			name = "Prepare Firebase configuration";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$PROJECT_DIR/scripts/prepare-firebase-config.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -400,17 +419,21 @@
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-Elexify.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APNS_ENVIRONMENT = development;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = Elexify/Elexify.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = BHV36GLW62;
 				ENABLE_BITCODE = NO;
+				GOOGLE_SERVICE_INFO_PLIST = "$(PROJECT_DIR)/Elexify/GoogleService-Info-development.plist";
 				INFOPLIST_FILE = Elexify/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -430,16 +453,20 @@
 			baseConfigurationReference = 5709B34CF0A7D63546082F79 /* Pods-Elexify.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APNS_ENVIRONMENT = production;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CODE_SIGN_ENTITLEMENTS = Elexify/Elexify.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = BHV36GLW62;
+				GOOGLE_SERVICE_INFO_PLIST = "$(PROJECT_DIR)/Elexify/GoogleService-Info.plist";
 				INFOPLIST_FILE = Elexify/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

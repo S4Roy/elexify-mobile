@@ -94,3 +94,4 @@ expo-env.d.ts
 # Environment-specific Firebase client configuration
 google-services.json
 GoogleService-Info.plist
+**/GoogleService-Info-*.plist
