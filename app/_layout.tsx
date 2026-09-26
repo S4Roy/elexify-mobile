@@ -1,3 +1,4 @@
+import { UpdateGate } from '../src/features/app-update/UpdateGate';
 import { PushProvider } from '../src/features/notifications/PushProvider';
 import React, { useState } from 'react';
 import { Stack } from 'expo-router';
@@ -37,10 +38,12 @@ export default function RootLayout() {
       {loaded && (
         <AppProviders>
           <StatusBar style="dark" />
-          <NavigationBarInset>
-            <Stack screenOptions={{ headerShown: false }} />
-          </NavigationBarInset>
-          <PushProvider />
+          <UpdateGate>
+            <NavigationBarInset>
+              <Stack screenOptions={{ headerShown: false }} />
+            </NavigationBarInset>
+            <PushProvider />
+          </UpdateGate>
         </AppProviders>
       )}
       {showSplash && (
