@@ -80,7 +80,7 @@ export const useSession = create<Session>(set => ({
       set({ endingSession: true });
       try {
       await cleanupPushSession().catch(() => undefined);
-      if (!localOnly) await revokeCurrentSession(useSession.getState().token);
+      if (!localOnly) await revokeCurrentSession(useSession.getState().token).catch(() => undefined);
       await sessionStorage.removeRefresh();
       // Stop authenticated traffic even if secure storage subsequently fails.
       set({ token: null, guestId: null, status: 'loading' });

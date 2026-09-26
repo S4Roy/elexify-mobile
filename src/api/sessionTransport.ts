@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiConfig } from './config';
 import { sessionStorage } from '../platform/session';
 const transport = axios.create({ baseURL: apiConfig.baseUrl ?? undefined, timeout: 15000, withCredentials: true,
@@ -34,7 +35,11 @@ export async function revokeCurrentSession(token: string | null, all = false) {
   if (pending) await pending.catch(() => undefined);
   if (all) token = await refreshSessionToken(token);
   const refresh = await sessionStorage.readRefresh();
-  await transport.post(`auth/user/${all ? 'logout-all' : 'logout'}`, refresh ? { refresh_token: refresh } : {},
+  const deviceId = !all ? await AsyncStorage.getItem('push.installation') : null;
+  await transport.post(`auth/user/${all ? 'logout-all' : 'logout'}`, {
+    ...(refresh ? { refresh_token: refresh } : {}),
+    ...(deviceId ? { device_id: deviceId } : {}),
+  },
     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
   await sessionStorage.removeRefresh();
 }
