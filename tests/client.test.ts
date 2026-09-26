@@ -50,6 +50,31 @@ test('customer requests carry bearer credentials and no guest header', async () 
     },
   });
 });
+const expiredAdapter = async (config: any) => ({
+  data: {},
+  status: 200,
+  statusText: 'OK',
+  headers: new AxiosHeaders({ 'x-session-expired': '1' }),
+  config,
+});
+test('a session-expired response signs out the session that sent it', async () => {
+  const signOut = jest.fn().mockResolvedValue(undefined);
+  useSession.setState({ signOut });
+  await api.get('products', { adapter: expiredAdapter });
+  expect(signOut).toHaveBeenCalledTimes(1);
+});
+test('a session-expired response for an older session is ignored', async () => {
+  const signOut = jest.fn().mockResolvedValue(undefined);
+  useSession.setState({ signOut });
+  await api.get('products', {
+    adapter: async config => {
+      // The customer signed in again while this request was in flight.
+      useSession.setState({ token: 'new-token' });
+      return expiredAdapter(config);
+    },
+  });
+  expect(signOut).not.toHaveBeenCalled();
+});
 test('rejects external URLs before sending credentials', async () => {
   const adapter = jest.fn();
   await expect(api.get('https://other.test', { adapter })).rejects.toThrow(

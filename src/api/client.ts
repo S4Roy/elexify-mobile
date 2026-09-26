@@ -50,8 +50,26 @@ api.interceptors.request.use(config => {
   }
   return config;
 });
+// Sign out when the token a request carried stops working: a 401 from a
+// sign-in-only route, or X-Session-Expired from a route that served the
+// request as a guest instead. Ignore an old request's response after the
+// user has switched sessions.
+async function expireSession(sentAuthorization: unknown) {
+  const token = useSession.getState().token;
+  if (token && sentAuthorization === `Bearer ${token}`) {
+    await useSession
+      .getState()
+      .signOut()
+      .catch(() => undefined);
+  }
+}
 api.interceptors.response.use(
-  response => response,
+  async response => {
+    if (response.headers['x-session-expired'] === '1') {
+      await expireSession(response.config.headers.get('Authorization'));
+    }
+    return response;
+  },
   async (error: unknown) => {
     if (error instanceof ApiError || axios.isCancel(error)) {
       return Promise.reject(error);
@@ -62,17 +80,11 @@ api.interceptors.response.use(
       );
     }
     const status = error.response?.status;
-    // Ignore an old request's 401 after the user has switched sessions.
-    const token = useSession.getState().token;
     if (
-      status === 401 &&
-      token &&
-      error.config?.headers.get('Authorization') === `Bearer ${token}`
+      status === 401 ||
+      error.response?.headers['x-session-expired'] === '1'
     ) {
-      await useSession
-        .getState()
-        .signOut()
-        .catch(() => undefined);
+      await expireSession(error.config?.headers.get('Authorization'));
     }
     const data = error.response?.data;
     const message = data?.validation?.body?.message ?? data?.message;
