@@ -11,11 +11,14 @@ class AppDelegate: ExpoAppDelegate {
 
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
+  var launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  private var didSetupExpoSubscribers = false
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    self.launchOptions = launchOptions
     // Optional environment-specific client configuration; credentials remain on the server.
     if FirebaseApp.app() == nil, Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
       FirebaseApp.configure()
@@ -28,15 +31,15 @@ class AppDelegate: ExpoAppDelegate {
     reactNativeFactory = factory
     bindReactNativeFactory(factory)
 
-    window = UIWindow(frame: UIScreen.main.bounds)
+    // Expo SDK 54 subscribers assume a key window exists during didFinishLaunching.
+    // Under the scene lifecycle, the window is created later by SceneDelegate.
+    return true
+  }
 
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions
-    )
-
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  func setupExpoSubscribers() {
+    guard !didSetupExpoSubscribers else { return }
+    didSetupExpoSubscribers = true
+    _ = super.application(UIApplication.shared, didFinishLaunchingWithOptions: launchOptions)
   }
 
   override func application(
@@ -57,6 +60,71 @@ class AppDelegate: ExpoAppDelegate {
     return super.application(application, continue: userActivity, restorationHandler: restorationHandler) || handled
   }
 
+}
+
+@objc(SceneDelegate)
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  var window: UIWindow?
+
+  func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard
+      let windowScene = scene as? UIWindowScene,
+      let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+      let factory = appDelegate.reactNativeFactory
+    else {
+      return
+    }
+
+    let window = UIWindow(windowScene: windowScene)
+    self.window = window
+    appDelegate.window = window
+    window.makeKeyAndVisible()
+    factory.startReactNative(
+      withModuleName: "main",
+      in: window,
+      launchOptions: appDelegate.launchOptions
+    )
+    appDelegate.setupExpoSubscribers()
+
+    for context in connectionOptions.urlContexts {
+      _ = appDelegate.application(UIApplication.shared, open: context.url, options: [:])
+    }
+    if let userActivity = connectionOptions.userActivities.first {
+      _ = appDelegate.application(UIApplication.shared, continue: userActivity) { _ in }
+    }
+  }
+
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+    for context in URLContexts {
+      _ = appDelegate.application(UIApplication.shared, open: context.url, options: [:])
+    }
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+    _ = appDelegate.application(UIApplication.shared, continue: userActivity) { _ in }
+  }
+
+  func sceneWillEnterForeground(_ scene: UIScene) {
+    (UIApplication.shared.delegate as? AppDelegate)?.applicationWillEnterForeground(UIApplication.shared)
+  }
+
+  func sceneDidBecomeActive(_ scene: UIScene) {
+    (UIApplication.shared.delegate as? AppDelegate)?.applicationDidBecomeActive(UIApplication.shared)
+  }
+
+  func sceneWillResignActive(_ scene: UIScene) {
+    (UIApplication.shared.delegate as? AppDelegate)?.applicationWillResignActive(UIApplication.shared)
+  }
+
+  func sceneDidEnterBackground(_ scene: UIScene) {
+    (UIApplication.shared.delegate as? AppDelegate)?.applicationDidEnterBackground(UIApplication.shared)
+  }
 }
 
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {

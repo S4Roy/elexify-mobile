@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
@@ -11,7 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../../components/ui';
-import { SkeletonBlock, StoreImage, money, shop } from '../../components/shop';
+import { money, shop } from '../../components/shop';
 import { theme } from '../../theme';
 import { useOrderDetail } from '../orders/hooks';
 import { friendlyReason } from './friendlyReason';
@@ -39,19 +40,129 @@ const TONES = {
   },
 } as const;
 
-const MAX_THUMBS = 4;
+function useReduceMotion() {
+  const [reduceMotion, setReduceMotion] = useState(true);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(setReduceMotion)
+      .catch(() => setReduceMotion(false));
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setReduceMotion,
+    );
+    return () => subscription.remove();
+  }, []);
+  return reduceMotion;
+}
 
-/** Status badge that pops in, with a soft ring pulsing out behind it. */
-function StatusBadge({ tone }: { tone: (typeof TONES)[keyof typeof TONES] }) {
+const CONFETTI = [
+  { x: -49, y: -28, color: '#F59E0B' },
+  { x: -34, y: -53, color: '#14B8A6' },
+  { x: -10, y: -62, color: '#F472B6' },
+  { x: 18, y: -58, color: '#60A5FA' },
+  { x: 45, y: -37, color: '#A78BFA' },
+  { x: 52, y: -5, color: '#F59E0B' },
+  { x: -53, y: 4, color: '#34D399' },
+  { x: 38, y: 20, color: '#FB7185' },
+];
+
+function CelebrationBurst({
+  active,
+  reduceMotion,
+}: {
+  active: boolean;
+  reduceMotion: boolean;
+}) {
+  const pieces = useMemo(
+    () => CONFETTI.map(() => new Animated.Value(0)),
+    [],
+  );
+  useEffect(() => {
+    if (!active || reduceMotion) return;
+    const animations = pieces.map(progress =>
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 850,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    );
+    Animated.stagger(35, animations).start();
+    return () => animations.forEach(animation => animation.stop());
+  }, [active, pieces, reduceMotion]);
+
+  if (!active || reduceMotion) return null;
+  return (
+    <View
+      pointerEvents="none"
+      style={styles.confettiLayer}
+      accessibilityElementsHidden
+    >
+      {CONFETTI.map((piece, index) => {
+        const progress = pieces[index];
+        return (
+          <Animated.View
+            key={`${piece.x}-${piece.y}`}
+            style={[
+              styles.confettiPiece,
+              { backgroundColor: piece.color },
+              {
+                opacity: progress.interpolate({
+                  inputRange: [0, 0.15, 1],
+                  outputRange: [0, 1, 0],
+                }),
+                transform: [
+                  {
+                    translateX: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, piece.x],
+                    }),
+                  },
+                  {
+                    translateY: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, piece.y],
+                    }),
+                  },
+                  {
+                    rotate: progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '170deg'],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+/** Status badge pops in once and gives successful orders a brief celebration. */
+function StatusBadge({
+  tone,
+  success,
+}: {
+  tone: (typeof TONES)[keyof typeof TONES];
+  success: boolean;
+}) {
+  const reduceMotion = useReduceMotion();
   const scale = useRef(new Animated.Value(0.4)).current;
   const ring = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.spring(scale, {
-      toValue: 1,
-      friction: 5,
-      tension: 120,
-      useNativeDriver: true,
-    }).start();
+    if (reduceMotion) {
+      scale.setValue(1);
+    } else {
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 5,
+        tension: 120,
+        useNativeDriver: true,
+      }).start();
+    }
+    if (reduceMotion) return;
     const pulse = Animated.loop(
       Animated.timing(ring, {
         toValue: 1,
@@ -63,9 +174,10 @@ function StatusBadge({ tone }: { tone: (typeof TONES)[keyof typeof TONES] }) {
     );
     pulse.start();
     return () => pulse.stop();
-  }, [ring, scale]);
+  }, [reduceMotion, ring, scale]);
   return (
     <View style={styles.badgeWrap} accessibilityElementsHidden>
+      {success && <CelebrationBurst active reduceMotion={reduceMotion} />}
       <Animated.View
         style={[
           styles.badgeRing,
@@ -96,41 +208,6 @@ function StatusBadge({ tone }: { tone: (typeof TONES)[keyof typeof TONES] }) {
           <Ionicons name={tone.icon as IconName} size={40} color="#FFFFFF" />
         </View>
       </Animated.View>
-    </View>
-  );
-}
-
-function NextStep({
-  icon,
-  title,
-  text,
-  done,
-  last,
-}: {
-  icon: IconName;
-  title: string;
-  text: string;
-  done?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <View style={styles.next}>
-      <View style={styles.nextRail}>
-        <View style={[styles.nextDot, done && styles.nextDotDone]}>
-          <Ionicons
-            name={done ? 'checkmark' : icon}
-            size={done ? 13 : 14}
-            color={done ? '#FFFFFF' : theme.colors.primary}
-          />
-        </View>
-        {!last && (
-          <View style={[styles.nextLine, done && styles.nextLineDone]} />
-        )}
-      </View>
-      <View style={[styles.flex, !last && styles.nextBody]}>
-        <AppText style={styles.nextTitle}>{title}</AppText>
-        <AppText style={styles.nextText}>{text}</AppText>
-      </View>
     </View>
   );
 }
@@ -231,9 +308,6 @@ export default function CheckoutResultScreen() {
         })
       : router.replace('/orders');
 
-  const thumbs = data?.items.slice(0, MAX_THUMBS) ?? [];
-  const extra = (data?.items.length ?? 0) - thumbs.length;
-  const itemCount = data?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
   const placedOn = data?.createdAt
     ? new Date(data.createdAt).toLocaleString('en-IN', {
         day: 'numeric',
@@ -248,11 +322,11 @@ export default function CheckoutResultScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.body,
-          { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 24 },
+          { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <StatusBadge tone={tone} />
+        <StatusBadge tone={tone} success={ok} />
         <AppText
           accessibilityRole="header"
           accessibilityLiveRegion="polite"
@@ -279,99 +353,65 @@ export default function CheckoutResultScreen() {
               )}
             </View>
 
-            {order.isPending && !!orderId ? (
-              <View style={styles.skeleton}>
-                <View style={styles.thumbRow}>
-                  {[0, 1, 2].map(i => (
-                    <SkeletonBlock key={i} style={styles.thumb} />
-                  ))}
-                </View>
-                <SkeletonBlock style={styles.skeletonLine} />
-                <SkeletonBlock style={styles.skeletonLineShort} />
-              </View>
-            ) : data ? (
-              <>
-                <View style={styles.itemsRow}>
-                  <View style={styles.thumbRow}>
-                    {thumbs.map(item => (
-                      <View key={item.id} style={styles.thumb}>
-                        <StoreImage
-                          uri={item.image}
-                          label={item.name}
-                          style={styles.thumbImage}
-                        />
-                      </View>
-                    ))}
-                    {extra > 0 && (
-                      <View style={[styles.thumb, styles.thumbMore]}>
-                        <AppText style={styles.thumbMoreText}>+{extra}</AppText>
-                      </View>
-                    )}
-                  </View>
-                  <AppText style={styles.itemCount}>
-                    {itemCount} item{itemCount === 1 ? '' : 's'}
-                  </AppText>
-                </View>
-
-                <View style={styles.amounts}>
-                  {ok && isPartialCod ? (
-                    <>
-                      <View style={shop.between}>
-                        <AppText style={styles.amountLabel}>
-                          Advance paid
-                        </AppText>
-                        <AppText style={styles.amountPaid}>
-                          {money(data.advanceAmount ?? 0)}
-                        </AppText>
-                      </View>
-                      <View style={shop.between}>
-                        <AppText style={styles.amountLabel}>
-                          Due on delivery
-                        </AppText>
-                        <AppText style={styles.amountValue}>
-                          {money(data.codDueAmount ?? 0)}
-                        </AppText>
-                      </View>
-                    </>
-                  ) : (
+            {data && (
+              <View style={styles.amounts}>
+                {ok && isPartialCod ? (
+                  <>
                     <View style={shop.between}>
                       <AppText style={styles.amountLabel}>
-                        {!ok
-                          ? 'Amount due'
-                          : isCod
-                          ? 'Pay on delivery'
-                          : 'Amount paid'}
+                        Advance paid
                       </AppText>
-                      <AppText
-                        style={
-                          ok && !isCod ? styles.amountPaid : styles.amountValue
-                        }
-                      >
-                        {money(data.grandTotal)}
+                      <AppText style={styles.amountPaid}>
+                        {money(data.advanceAmount ?? 0)}
                       </AppText>
                     </View>
-                  )}
-                  <View style={styles.methodRow}>
-                    <Ionicons
-                      name={
-                        data.paymentMethod === 'cod' && !isPartialCod
-                          ? 'cash-outline'
-                          : 'card-outline'
+                    <View style={shop.between}>
+                      <AppText style={styles.amountLabel}>
+                        Due on delivery
+                      </AppText>
+                      <AppText style={styles.amountValue}>
+                        {money(data.codDueAmount ?? 0)}
+                      </AppText>
+                    </View>
+                  </>
+                ) : (
+                  <View style={shop.between}>
+                    <AppText style={styles.amountLabel}>
+                      {!ok
+                        ? 'Amount due'
+                        : isCod
+                          ? 'Pay on delivery'
+                          : 'Amount paid'}
+                    </AppText>
+                    <AppText
+                      style={
+                        ok && !isCod ? styles.amountPaid : styles.amountValue
                       }
-                      size={14}
-                      color={theme.colors.secondary}
-                    />
-                    <AppText style={styles.method}>
-                      {isPartialCod
-                        ? 'Partial Cash on Delivery'
-                        : data.paymentMethod === 'cod'
-                        ? 'Cash on Delivery'
-                        : 'Online payment'}
+                    >
+                      {money(data.grandTotal)}
                     </AppText>
                   </View>
+                )}
+                <View style={styles.methodRow}>
+                  <Ionicons
+                    name={
+                      data.paymentMethod === 'cod' && !isPartialCod
+                        ? 'cash-outline'
+                        : 'card-outline'
+                    }
+                    size={14}
+                    color={theme.colors.secondary}
+                  />
+                  <AppText style={styles.method}>
+                    {isPartialCod
+                      ? 'Partial Cash on Delivery'
+                      : data.paymentMethod === 'cod'
+                        ? 'Cash on Delivery'
+                        : 'Online payment'}
+                  </AppText>
                 </View>
-              </>
-            ) : null}
+              </View>
+            )}
           </View>
         )}
 
@@ -397,25 +437,11 @@ export default function CheckoutResultScreen() {
         {ok && <PushOptInCard variant="order" throttled />}
 
         {ok ? (
-          <View style={styles.card}>
-            <AppText style={styles.cardTitle}>What happens next</AppText>
-            <NextStep
-              icon="checkmark"
-              title="Order confirmed"
-              text="Your order is in. You can see its details any time in My orders."
-              done
-            />
-            <NextStep
-              icon="cube-outline"
-              title="Packed & shipped"
-              text="We'll pack your items and ship them to your address."
-            />
-            <NextStep
-              icon="navigate-outline"
-              title="Track your delivery"
-              text="Follow every update from My orders."
-              last
-            />
+          <View style={styles.deliveryNote}>
+            <Ionicons name="notifications-outline" size={18} color={theme.colors.primary} />
+            <AppText style={styles.deliveryText}>
+              We’ll share updates as your order moves toward delivery.
+            </AppText>
           </View>
         ) : (
           !!orderId && (
@@ -502,17 +528,28 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, alignItems: 'center', gap: 14 },
 
   badgeWrap: {
-    width: 128,
-    height: 128,
+    width: 104,
+    height: 104,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 0,
+  },
+  confettiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confettiPiece: {
+    position: 'absolute',
+    width: 7,
+    height: 11,
+    borderRadius: 2,
   },
   badgeRing: {
     position: 'absolute',
-    width: 104,
-    height: 104,
-    borderRadius: 52,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
   },
   badgeOuter: {
     width: 104,
@@ -522,9 +559,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeInner: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -547,19 +584,14 @@ const styles = StyleSheet.create({
   card: {
     alignSelf: 'stretch',
     gap: 14,
-    padding: 16,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     shadowColor: '#0F172A',
     shadowOpacity: 0.04,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
-  },
-  cardTitle: {
-    fontFamily: theme.fonts.semibold,
-    fontSize: 15,
-    color: theme.colors.text,
   },
   orderHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   label: { fontSize: 11, lineHeight: 15, color: theme.colors.secondary },
@@ -575,34 +607,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: theme.colors.text,
   },
-  itemsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  thumbRow: { flexDirection: 'row', gap: 8 },
-  thumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-  },
-  thumbImage: { width: '100%', height: '100%' },
-  thumbMore: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-  },
-  thumbMoreText: {
-    fontFamily: theme.fonts.semibold,
-    fontSize: 13,
-    color: theme.colors.secondary,
-  },
-  itemCount: { fontSize: 12, color: theme.colors.secondary },
   amounts: {
     gap: 8,
     paddingTop: 12,
@@ -618,9 +622,6 @@ const styles = StyleSheet.create({
   amountPaid: { fontFamily: theme.fonts.bold, fontSize: 16, color: GREEN },
   methodRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   method: { fontSize: 12, color: theme.colors.secondary },
-  skeleton: { gap: 10 },
-  skeletonLine: { height: 14, width: '70%' },
-  skeletonLineShort: { height: 12, width: '40%' },
 
   reasonBox: {
     alignSelf: 'stretch',
@@ -645,33 +646,17 @@ const styles = StyleSheet.create({
   },
   retryText: { flex: 1, fontSize: 13, lineHeight: 19, color: '#92400E' },
 
-  next: { flexDirection: 'row', gap: 12 },
-  nextRail: { alignItems: 'center' },
-  nextDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  deliveryNote: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: theme.colors.primaryLight,
   },
-  nextDotDone: { backgroundColor: theme.colors.primary },
-  nextLine: {
-    flex: 1,
-    width: 2,
-    marginVertical: 3,
-    borderRadius: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  nextLineDone: { backgroundColor: theme.colors.primary },
-  nextBody: { paddingBottom: 14 },
-  nextTitle: {
-    fontFamily: theme.fonts.semibold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.text,
-  },
-  nextText: { fontSize: 12, lineHeight: 18, color: theme.colors.secondary },
+  deliveryText: { flex: 1, color: theme.colors.primaryDark, fontSize: 12, lineHeight: 18 },
 
   actions: { alignSelf: 'stretch', gap: 10, marginTop: 4 },
   primary: {
