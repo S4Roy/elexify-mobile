@@ -1,5 +1,5 @@
 import { api, ApiError } from './client';
-import { record, string } from './discovery';
+import { imageUrl, record, string } from './discovery';
 
 const number = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -206,8 +206,11 @@ export async function fetchOrders(page = 1, signal?: AbortSignal) {
 
 export type OrderItem = {
   id: string;
+  productId?: string;
+  variationId?: string;
   name: string;
   image?: string;
+  userRating?: number;
   quantity: number;
   price: number | null;
   regularPrice: number | null;
@@ -283,6 +286,16 @@ export type RefundRecord = {
 
 export type OrderDetail = OrderSummary & {
   items: OrderItem[];
+  shippingAddress: {
+    name: string;
+    phone: string;
+    line1: string;
+    line2: string;
+    city: string;
+    state: string;
+    postcode: string;
+    type: string;
+  } | null;
   shipping: number | null;
   discount: number | null;
   codFee: number | null;
@@ -432,12 +445,27 @@ export async function fetchOrderDetail(
   const items: OrderItem[] = rawItems.map(item => {
     const i = record(item);
     const product = record(i.product);
-    const images = Array.isArray(product.images) ? product.images : [];
-    const firstImage = record(images[0]);
+    const variation = record(i.variation);
+    const ratingSummary = record(i.rating_summary);
+    const userReview = record(ratingSummary.user_review);
+    const displayImages = Array.isArray(i.display_images) ? i.display_images : [];
+    const variationImages = Array.isArray(variation.images) ? variation.images : [];
+    const productImages = Array.isArray(product.images) ? product.images : [];
+    const itemImages = Array.isArray(i.images) ? i.images : [];
+    const image = [
+      ...displayImages,
+      ...variationImages,
+      ...productImages,
+      ...itemImages,
+      i.image,
+    ].map(imageUrl).find((url): url is string => !!url);
     return {
       id: string(i._id),
-      name: string(product.name) || string(i.display_name) || string(i.name),
-      image: typeof firstImage.url === 'string' ? firstImage.url : undefined,
+      productId: string(i.product_id) || string(product._id) || undefined,
+      variationId: string(i.variation_id) || string(variation._id) || undefined,
+      name: string(i.display_name) || string(product.name) || string(i.name),
+      image,
+      userRating: number(userReview.rating) ?? undefined,
       quantity: number(i.quantity) ?? 0,
       // The order-item resource exposes unit_price (not price) — this was
       // previously reading a field that doesn't exist, so every item's
@@ -457,6 +485,24 @@ export async function fetchOrderDetail(
   const packages = Array.isArray(o.packages)
     ? o.packages.map(parsePackage).filter((p): p is OrderPackage => p !== null)
     : [];
+  const address = record(o.shipping_address);
+  const addressCity = record(address.city);
+  const addressState = record(address.state);
+  const shippingAddress =
+    Object.keys(address).length > 0
+      ? {
+          name: string(address.full_name),
+          phone: [string(address.phone_code), string(address.phone)]
+            .filter(Boolean)
+            .join(' '),
+          line1: string(address.address_line_1),
+          line2: string(address.address_line_2) || string(address.land_mark),
+          city: string(address.city_name) || string(addressCity.name) || string(address.city),
+          state: string(address.state_name) || string(addressState.name) || string(address.state),
+          postcode: string(address.postcode),
+          type: string(address.address_type) || 'home',
+        }
+      : null;
   const legacyAwb = string(o.awb);
   const legacyTracking: LegacyTracking | null =
     !packages.length && legacyAwb
@@ -473,6 +519,7 @@ export async function fetchOrderDetail(
   return {
     ...summary,
     items,
+    shippingAddress,
     shipping: number(o.shipping),
     discount: number(o.discount),
     codFee: number(o.cod_fee),

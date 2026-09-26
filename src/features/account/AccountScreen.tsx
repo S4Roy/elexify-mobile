@@ -11,7 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, type Href } from 'expo-router';
 import { AppText, Feedback, Loading } from '../../components/ui';
 import { useConfirm } from '../../components/ui/ConfirmDialog';
-import { ShopHeader, SkeletonBlock, money, shop } from '../../components/shop';
+import { ShopHeader, SkeletonBlock, StoreImage, money, shop } from '../../components/shop';
 import { useAddresses } from '../address/hooks';
 import { useAccount } from '../auth/hooks';
 import { useWishlist } from '../wishlist/hooks';
@@ -192,26 +192,45 @@ function OrdersCard() {
               pressed && styles.rowPressed,
             ]}
           >
-            <View style={styles.latestIcon}>
-              <Ionicons name="bag-handle-outline" size={18} color={MUTED} />
+            <View style={styles.latestMain}>
+              <StoreImage
+                uri={latest.previews[0]?.image ?? undefined}
+                label={latest.previews[0]?.name ?? `Order ${latest.orderNumber}`}
+                style={styles.latestImage}
+              />
+              <View style={styles.latestDetails}>
+                <View style={styles.latestTitleRow}>
+                  <AppText style={styles.latestTitle} numberOfLines={1}>
+                    #{latest.orderNumber}
+                  </AppText>
+                  <AppText style={styles.latestTotal}>
+                    {money(latest.grandTotal)}
+                  </AppText>
+                </View>
+                {!!latest.previews[0]?.name && (
+                  <AppText style={styles.latestProductName}>
+                    {latest.previews[0].name}
+                  </AppText>
+                )}
+                <AppText style={styles.latestMeta}>
+                  {new Date(latest.createdAt).toLocaleDateString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                  })}{' '}
+                  · {latest.totalItems} {latest.totalItems === 1 ? 'item' : 'items'}
+                </AppText>
+              </View>
             </View>
-            <View style={styles.rowText}>
-              <AppText style={styles.latestTitle}>
-                Order #{latest.orderNumber}
-              </AppText>
-              <AppText style={styles.rowSubtitle}>
-                {new Date(latest.createdAt).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                })}{' '}
-                · {latest.totalItems} item{latest.totalItems === 1 ? '' : 's'} ·{' '}
-                {money(latest.grandTotal)}
-              </AppText>
-            </View>
-            <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-              <AppText style={[styles.pillText, { color: tone.text }]}>
-                {orderStatusLabel(latest.orderStatus)}
-              </AppText>
+            <View style={styles.latestFooter}>
+              <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+                <AppText style={[styles.pillText, { color: tone.text }]}>
+                  {orderStatusLabel(latest.orderStatus)}
+                </AppText>
+              </View>
+              <View style={styles.latestOpen}>
+                <AppText style={styles.latestOpenText}>Order details</AppText>
+                <Ionicons name="chevron-forward" size={15} color={theme.colors.primary} />
+              </View>
             </View>
           </Pressable>
         ) : null}
@@ -505,6 +524,7 @@ export default function AccountScreen() {
             onPress={() =>
               confirm({
                 title: 'Sign out?',
+                icon: 'log-out-outline',
                 message:
                   'You can always sign back in with your mobile number or Google account.',
                 confirmLabel: 'Sign out',
@@ -623,34 +643,35 @@ const styles = StyleSheet.create({
   },
   tiles: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
+    paddingHorizontal: 10,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
   tile: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   tileIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: TILE_BG,
   },
-  tileLabel: { fontSize: 12, color: theme.colors.text },
+  tileLabel: { fontSize: 11, color: theme.colors.text },
   latest: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    gap: 9,
     marginHorizontal: 12,
     marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+    padding: 11,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#E8ECEF',
+    backgroundColor: '#FBFCFD',
   },
   latestSkeleton: {
     height: 58,
@@ -658,21 +679,57 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderRadius: 12,
   },
-  latestIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  latestMain: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  latestImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 9,
     backgroundColor: '#FFFFFF',
   },
+  latestDetails: { flex: 1, minWidth: 0, gap: 3 },
+  latestTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   latestTitle: {
-    fontFamily: theme.fonts.medium,
-    fontSize: 14,
+    fontFamily: theme.fonts.semibold,
+    fontSize: 13,
     color: theme.colors.text,
   },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  pillText: { fontSize: 11, fontFamily: theme.fonts.semibold },
+  latestProductName: {
+    flexShrink: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#4B5563',
+  },
+  latestMeta: { fontSize: 10, color: MUTED },
+  latestTotal: {
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
+    color: theme.colors.text,
+  },
+  latestFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#EDF0F2',
+    paddingTop: 7,
+  },
+  statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  pillText: { fontSize: 10, fontFamily: theme.fonts.semibold },
+  latestOpen: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  latestOpenText: {
+    fontSize: 10,
+    color: theme.colors.primary,
+    fontFamily: theme.fonts.medium,
+  },
 
   // Rows
   row: {

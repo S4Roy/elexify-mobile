@@ -252,9 +252,20 @@ export const styles = StyleSheet.create({
   },
 });
 const otpStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, position: 'relative' },
+  row: {
+    alignSelf: 'stretch',
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    position: 'relative',
+  },
   box: {
     width: 46,
+    maxWidth: 48,
+    minWidth: 0,
+    flex: 1,
+    flexShrink: 1,
     height: 54,
     borderWidth: 1.5,
     borderColor: theme.colors.border,

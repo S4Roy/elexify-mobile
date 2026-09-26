@@ -20,6 +20,7 @@ import { theme } from '../../theme';
 import { useAccount } from '../auth/hooks';
 import {
   useChangePassword,
+  useCancelEmailChange,
   useRequestEmailChange,
   useRequestMobileChange,
   useResendAccountOtp,
@@ -189,6 +190,7 @@ function ChangeContactCard({
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const requestEmail = useRequestEmailChange();
+  const cancelEmailChange = useCancelEmailChange();
   const requestMobile = useRequestMobileChange();
   const verifyEmail = useVerifyEmailChange();
   const verifyMobile = useVerifyMobileChange();
@@ -216,6 +218,7 @@ function ChangeContactCard({
       ? trimmed.toLowerCase() === current.toLowerCase()
       : trimmed.length === 10 && current.replace(/\D/g, '').endsWith(trimmed));
   const target = isEmail ? trimmed : `+91 ${maskMobile(trimmed)}`;
+  const [otpTarget, setOtpTarget] = useState('');
 
   const startFlow = () => {
     setStep('enter');
@@ -224,6 +227,19 @@ function ChangeContactCard({
     setDone('');
   };
   const cancel = () => {
+    if (isEmail && pending) {
+      setError('');
+      cancelEmailChange.mutate(undefined, {
+        onSuccess: () => {
+          setStep('idle');
+          setOtp('');
+          setOtpTarget('');
+          setDone('Email change cancelled. Your current email is unchanged.');
+        },
+        onError: err => setError(err.message),
+      });
+      return;
+    }
     setStep('idle');
     setError('');
   };
@@ -236,6 +252,7 @@ function ChangeContactCard({
     mutate(trimmed, {
       onSuccess: () => {
         setOtp('');
+        setOtpTarget(target);
         setStep('otp');
         setCooldown(RESEND_SECONDS);
         setOtpRequest(n => n + 1);
@@ -271,6 +288,21 @@ function ChangeContactCard({
     resend.mutate(isEmail ? 'change_email' : 'change_mobile', {
       onSuccess: () => {
         setOtp('');
+        setCooldown(RESEND_SECONDS);
+        setOtpRequest(n => n + 1);
+      },
+      onError: err => setError(err.message),
+    });
+  };
+  const continuePendingEmail = () => {
+    if (resend.isPending) return;
+    setError('');
+    resend.mutate('change_email', {
+      onSuccess: () => {
+        setOtp('');
+        setOtpTarget(pending || 'your new email address');
+        setValue('');
+        setStep('otp');
         setCooldown(RESEND_SECONDS);
         setOtpRequest(n => n + 1);
       },
@@ -322,13 +354,29 @@ function ChangeContactCard({
       </View>
 
       {!!pending && step === 'idle' && (
-        <View style={styles.pendingNote}>
-          <Ionicons name="time-outline" size={14} color={AMBER} />
-          <AppText style={styles.pendingText}>
-            Change to {pending} is waiting for verification. Tap Change to send
-            a new code.
-          </AppText>
-        </View>
+        <>
+          <View style={styles.pendingNote}>
+            <Ionicons name="time-outline" size={14} color={AMBER} />
+            <View style={styles.flex}>
+              <AppText style={styles.pendingText}>
+                Change to {pending} is waiting for verification.
+              </AppText>
+              {isEmail && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={resend.isPending}
+                  onPress={continuePendingEmail}
+                  hitSlop={8}
+                >
+                  <AppText style={styles.link}>
+                    {resend.isPending ? 'Sending…' : 'Continue verification'}
+                  </AppText>
+                </Pressable>
+              )}
+            </View>
+          </View>
+          {!!error && <InlineMessage tone="error" text={error} />}
+        </>
       )}
       {!!done && step === 'idle' && (
         <InlineMessage tone="success" text={done} />
@@ -429,7 +477,7 @@ function ChangeContactCard({
               <View style={styles.sentTo}>
                 <AppText style={styles.sentText}>
                   Enter the code sent to{' '}
-                  <AppText style={styles.sentTarget}>{target}</AppText>
+                  <AppText style={styles.sentTarget}>{otpTarget || target}</AppText>
                 </AppText>
                 <Pressable
                   accessibilityRole="button"

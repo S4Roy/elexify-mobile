@@ -5,9 +5,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from './index';
 import { theme } from '../../theme';
 
@@ -17,6 +22,7 @@ export type ConfirmOptions = {
   message?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
   /** Red destructive styling for the confirm button. Defaults to true — most
    * confirmations in this app (delete, sign out) are destructive/irreversible. */
   destructive?: boolean;
@@ -84,6 +90,7 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
   };
 
   const destructive = state?.options.destructive ?? true;
+  const iconColor = destructive ? theme.colors.danger : theme.colors.primary;
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -91,7 +98,7 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
       <Modal
         visible={!!state}
         transparent
-        animationType="slide"
+        animationType="fade"
         statusBarTranslucent
         onRequestClose={close}
       >
@@ -102,15 +109,27 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
             onPress={close}
             style={styles.backdrop}
           />
-          <SafeAreaView
-            edges={['bottom']}
-            style={styles.sheet}
-            accessibilityViewIsModal
-          >
-            <View style={styles.handle} />
+          <View style={styles.sheet} accessibilityViewIsModal>
             <View style={styles.heading}>
+              <View
+                style={[
+                  styles.iconBadge,
+                  destructive ? styles.iconBadgeDestructive : styles.iconBadgePrimary,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    state?.options.icon ??
+                    (destructive ? 'alert-circle-outline' : 'information-circle-outline')
+                  }
+                  size={22}
+                  color={iconColor}
+                />
+              </View>
               <View style={styles.headingText}>
-                <AppText style={styles.title}>{state?.options.title}</AppText>
+                <AppText accessibilityRole="header" style={styles.title}>
+                  {state?.options.title}
+                </AppText>
                 {!!state?.options.subtitle && (
                   <AppText style={styles.subtitle}>
                     {state.options.subtitle}
@@ -156,6 +175,9 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
                   state?.pending && styles.disabled,
                 ]}
               >
+                {state?.pending && (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                )}
                 <AppText style={styles.confirmButtonText}>
                   {state?.pending
                     ? 'Please wait…'
@@ -174,7 +196,7 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
                 </AppText>
               </Pressable>
             </View>
-          </SafeAreaView>
+          </View>
         </View>
       </Modal>
     </ConfirmContext.Provider>
@@ -182,58 +204,105 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
+  root: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
     backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 22,
     paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  handle: {
-    width: 42,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#D1D5DB',
-    alignSelf: 'center',
-    marginBottom: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
   heading: {
-    flexDirection: 'row',
     alignItems: 'center',
     paddingBottom: 16,
-    gap: 10,
+    gap: 12,
   },
-  headingText: { flex: 1 },
-  title: { fontFamily: theme.fonts.semibold, fontSize: 18 },
-  subtitle: { color: theme.colors.secondary, fontSize: 13, marginTop: 2 },
+  iconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBadgeDestructive: { backgroundColor: '#FEF2F2' },
+  iconBadgePrimary: { backgroundColor: theme.colors.primaryLight },
+  headingText: { width: '100%', alignItems: 'center', gap: 3 },
+  title: {
+    fontFamily: theme.fonts.semibold,
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
+    color: theme.colors.text,
+  },
+  subtitle: {
+    color: theme.colors.secondary,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: 1,
+  },
   closeButton: {
-    width: 44,
-    height: 44,
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
-  body: { gap: 14, paddingBottom: 16 },
-  message: { color: theme.colors.secondary, fontSize: 14, lineHeight: 20 },
-  error: { color: theme.colors.danger, fontSize: 13 },
+  body: { gap: 12, paddingBottom: 4 },
+  message: {
+    color: theme.colors.secondary,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  error: { color: theme.colors.danger, fontSize: 13, textAlign: 'center' },
   confirmButton: {
-    minHeight: 50,
-    borderRadius: 10,
+    minHeight: 48,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   confirmButtonDestructive: { backgroundColor: theme.colors.danger },
   confirmButtonPrimary: { backgroundColor: theme.colors.primary },
-  confirmButtonText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 15,
+  },
   cancelButton: {
-    minHeight: 48,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
   },
-  cancelText: { color: theme.colors.primary, fontFamily: theme.fonts.medium },
-  disabled: { opacity: 0.5 },
+  cancelText: {
+    color: theme.colors.text,
+    fontFamily: theme.fonts.medium,
+    fontSize: 14,
+  },
+  disabled: { opacity: 0.55 },
 });

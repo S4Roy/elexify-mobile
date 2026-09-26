@@ -49,6 +49,7 @@ import { CancelOrderSheet } from './CancelOrderSheet';
 import { PaymentRetryCard } from './PaymentRetryCard';
 import { cancellationOutcome, refundSteps } from './cancellation';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
+import { useSubmitRating } from '../product/hooks';
 
 const RETRY_WINDOW_MS = 60 * 60 * 1000;
 
@@ -56,13 +57,15 @@ const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value ?? '';
 function PackageCard({
   pkg,
-  orderItems,
   shipment,
+  orderItems,
+  showItems,
 }: {
   pkg: OrderPackage;
-  orderItems: OrderItem[];
   /** The tracking API's view of this package, with the full courier log. */
   shipment?: TrackingShipment;
+  orderItems: OrderDetail['items'];
+  showItems: boolean;
 }) {
   const [showLog, setShowLog] = useState(false);
   const progress = showsPackageProgress(pkg);
@@ -105,7 +108,7 @@ function PackageCard({
         </View>
       </View>
 
-      {!!pkg.items.length && (
+      {showItems && !!pkg.items.length && (
         <View style={styles.packageItems}>
           {pkg.items.map(line => {
             const item = orderItems.find(i => i.id === line.orderItemId);
@@ -116,13 +119,9 @@ function PackageCard({
                   label={item?.name ?? ''}
                   style={styles.packageItemImage}
                 />
-                <AppText style={styles.packageItemName} numberOfLines={2}>
-                  {item?.name || 'Product unavailable'}
-                </AppText>
+                <AppText style={styles.packageItemName}>{item?.name || 'Product unavailable'}</AppText>
                 <View style={styles.packageQty}>
-                  <AppText style={styles.packageQtyText}>
-                    ×{line.quantity}
-                  </AppText>
+                  <AppText style={styles.packageQtyText}>×{line.quantity}</AppText>
                 </View>
               </View>
             );
@@ -177,7 +176,7 @@ function PackageCard({
         </AppText>
       ) : null}
 
-      {progress && (
+      {progress && !shipment && (
         <View
           style={styles.steps}
           accessibilityLabel={`Package ${pkg.packageNumber} delivery progress`}
@@ -408,6 +407,109 @@ function CancellationCard({ order }: { order: OrderDetail }) {
   );
 }
 
+function OrderItemRow({
+  item,
+  canRate,
+}: {
+  item: OrderItem;
+  canRate: boolean;
+}) {
+  const [rating, setRating] = useState(item.userRating ?? 0);
+  const [saved, setSaved] = useState((item.userRating ?? 0) > 0);
+  const submitRating = useSubmitRating(item.productId, item.variationId);
+  return (
+    <View style={styles.itemBlock}>
+      <View style={styles.itemRow}>
+        <StoreImage
+          uri={item.image}
+          label={item.name}
+          style={styles.itemImage}
+        />
+        <View style={styles.itemDescription}>
+          <AppText style={styles.itemName}>{item.name}</AppText>
+          <AppText style={shop.muted}>Qty {item.quantity}</AppText>
+          <View style={styles.itemPriceRow}>
+            {!!item.discountPercent && item.regularPrice !== null ? (
+              <>
+                <AppText style={styles.itemStrike}>
+                  {money(item.regularPrice)}
+                </AppText>
+                <AppText style={styles.itemPrice}>
+                  {item.price === null ? '—' : money(item.price)} each
+                </AppText>
+              </>
+            ) : (
+              <AppText style={styles.itemPrice}>
+                {item.price === null ? '—' : `${money(item.price)} each`}
+              </AppText>
+            )}
+          </View>
+        </View>
+        <AppText style={styles.itemTotal}>
+          {money(item.totalPrice ?? (item.price ?? 0) * item.quantity)}
+        </AppText>
+      </View>
+      {canRate && !!item.productId && (
+        <View style={styles.rateRow}>
+          <View style={styles.ratePrompt}>
+            <AppText style={styles.rateLabel}>
+              {saved ? 'Your rating' : 'Rate this item'}
+            </AppText>
+            <View style={styles.rateStars}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <Pressable
+                  key={star}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rate ${item.name} ${star} out of 5 stars`}
+                  accessibilityState={{ selected: rating === star }}
+                  onPress={() => {
+                    setRating(star);
+                    setSaved(false);
+                    submitRating.reset();
+                  }}
+                  hitSlop={4}
+                >
+                  <Ionicons
+                    name={star <= rating ? 'star' : 'star-outline'}
+                    size={17}
+                    color={star <= rating ? '#EAA51A' : '#AAB2BD'}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          {saved ? (
+            <View style={styles.ratingSaved}>
+              <Ionicons name="checkmark-circle" size={15} color="#15803D" />
+              <AppText style={styles.ratingSavedText}>Saved</AppText>
+            </View>
+          ) : rating > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: submitRating.isPending, busy: submitRating.isPending }}
+              disabled={submitRating.isPending}
+              onPress={() =>
+                submitRating.mutate(
+                  { rating },
+                  { onSuccess: () => setSaved(true) },
+                )
+              }
+              style={({ pressed }) => [styles.rateSubmit, pressed && styles.pressed]}
+            >
+              <AppText style={styles.rateSubmitText}>
+                {submitRating.isPending ? 'Saving…' : 'Submit'}
+              </AppText>
+            </Pressable>
+          ) : null}
+          {submitRating.isError && (
+            <AppText style={styles.rateError}>{submitRating.error.message}</AppText>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function OrderDetailScreen() {
   const route = useLocalSearchParams<{ id: string }>();
   const id = first(route.id);
@@ -511,7 +613,7 @@ export default function OrderDetailScreen() {
 
   return (
     <View style={shop.page}>
-      <ShopHeader title={data?.orderNumber || 'Order'} back />
+      <ShopHeader title={data?.orderNumber ? 'Order details' : 'Order'} back />
       <ScrollView contentContainerStyle={styles.body}>
         <QueryState
           pending={order.isPending}
@@ -568,50 +670,70 @@ export default function OrderDetailScreen() {
                 </Pressable>
               </View>
             )}
-            <View style={styles.section}>
-              <View style={styles.statusPillRow}>
+            <View style={styles.heroCard}>
+              <View style={styles.heroTop}>
                 <View
                   style={[
-                    styles.statusPill,
+                    styles.heroIcon,
                     { backgroundColor: orderStatusColor(data.orderStatus).bg },
                   ]}
                 >
-                  <AppText
-                    style={[
-                      styles.statusPillText,
-                      { color: orderStatusColor(data.orderStatus).text },
-                    ]}
-                  >
+                  <Ionicons
+                    name={
+                      data.orderStatus === 'delivered'
+                        ? 'checkmark-done-outline'
+                        : data.orderStatus === 'cancelled'
+                        ? 'close-outline'
+                        : 'cube-outline'
+                    }
+                    size={20}
+                    color={orderStatusColor(data.orderStatus).text}
+                  />
+                </View>
+                <View style={shop.flex}>
+                  <AppText style={styles.heroEyebrow}>ORDER STATUS</AppText>
+                  <AppText style={styles.heroTitle}>
                     {orderStatusLabel(data.orderStatus)}
                   </AppText>
                 </View>
-                <View
-                  style={[
-                    styles.statusPill,
-                    {
-                      backgroundColor: paymentStatusColor(data.paymentStatus)
-                        .bg,
-                    },
-                  ]}
-                >
-                  <AppText
+              </View>
+              <View style={styles.heroMeta}>
+                <AppText style={styles.heroOrderNumber} numberOfLines={1}>
+                  #{data.orderNumber}
+                </AppText>
+                <AppText style={styles.heroDate}>
+                  {fmtDateTime(data.createdAt)}
+                </AppText>
+              </View>
+              <View style={styles.heroDivider} />
+              <View style={styles.heroBottom}>
+                <View style={styles.heroPayment}>
+                  <View
                     style={[
-                      styles.statusPillText,
-                      { color: paymentStatusColor(data.paymentStatus).text },
+                      styles.paymentDot,
+                      { backgroundColor: paymentStatusColor(data.paymentStatus).text },
                     ]}
-                  >
-                    {orderStatusLabel(data.paymentStatus)}
+                  />
+                  <View style={shop.flex}>
+                    <AppText style={styles.heroPaymentStatus}>
+                      {orderStatusLabel(data.paymentStatus)}
+                    </AppText>
+                    <AppText style={styles.heroPaymentMethod} numberOfLines={1}>
+                      {data.paymentMethod !== 'cod'
+                        ? 'Online payment'
+                        : data.isPartialCod
+                        ? 'Partial Cash on Delivery'
+                        : 'Cash on Delivery'}
+                    </AppText>
+                  </View>
+                </View>
+                <View style={styles.heroTotal}>
+                  <AppText style={styles.heroTotalLabel}>Order total</AppText>
+                  <AppText style={styles.heroTotalValue}>
+                    {money(data.grandTotal)}
                   </AppText>
                 </View>
               </View>
-              <AppText style={shop.muted}>
-                {data.paymentMethod !== 'cod'
-                  ? 'Online payment'
-                  : data.isPartialCod
-                  ? 'Partial Cash on Delivery'
-                  : 'Cash on Delivery'}{' '}
-                · Placed on {fmtDateTime(data.createdAt)}
-              </AppText>
               {canDownloadInvoice(data) && (
                 <Pressable
                   accessibilityRole="button"
@@ -690,6 +812,7 @@ export default function OrderDetailScreen() {
                     key={pkg.packageNumber}
                     pkg={pkg}
                     orderItems={data.items}
+                    showItems={data.packages.length > 1}
                     shipment={tracking.data?.shipments.find(
                       s => s.packageNumber === pkg.packageNumber,
                     )}
@@ -701,48 +824,74 @@ export default function OrderDetailScreen() {
               </View>
             )}
 
-            <View style={styles.section}>
-              <AppText style={shop.heading}>Items</AppText>
-              {data.items.map(item => {
-                const lineTotal =
-                  item.totalPrice ?? (item.price ?? 0) * item.quantity;
-                return (
-                  <View key={item.id} style={styles.itemRow}>
-                    <StoreImage
-                      uri={item.image}
-                      label={item.name}
-                      style={styles.itemImage}
+            {!!data.shippingAddress && (
+              <View style={styles.section}>
+                <View style={styles.addressHeading}>
+                  <View style={styles.addressIcon}>
+                    <Ionicons
+                      name="location-outline"
+                      size={17}
+                      color={theme.colors.primary}
                     />
-                    <View style={shop.flex}>
-                      <AppText style={styles.itemName}>{item.name}</AppText>
-                      <AppText style={shop.muted}>Qty {item.quantity}</AppText>
-                      <View style={styles.itemPriceRow}>
-                        {!!item.discountPercent &&
-                        item.regularPrice !== null ? (
-                          <>
-                            <AppText style={styles.itemStrike}>
-                              {money(item.regularPrice)}
-                            </AppText>
-                            <AppText style={styles.itemPrice}>
-                              {item.price === null ? '—' : money(item.price)}{' '}
-                              each
-                            </AppText>
-                          </>
-                        ) : (
-                          <AppText style={styles.itemPrice}>
-                            {item.price === null
-                              ? '—'
-                              : `${money(item.price)} each`}
-                          </AppText>
-                        )}
-                      </View>
-                    </View>
-                    <AppText style={styles.itemTotal}>
-                      {money(lineTotal)}
+                  </View>
+                  <View style={shop.flex}>
+                    <AppText style={shop.heading}>Delivery address</AppText>
+                    <AppText style={styles.addressHint}>Shipping to</AppText>
+                  </View>
+                  <View style={styles.addressType}>
+                    <AppText style={styles.addressTypeText}>
+                      {data.shippingAddress.type}
                     </AppText>
                   </View>
-                );
-              })}
+                </View>
+                <View style={styles.addressBody}>
+                  {!!data.shippingAddress.name && (
+                    <AppText style={styles.addressName}>
+                      {data.shippingAddress.name}
+                    </AppText>
+                  )}
+                  <AppText style={styles.addressText}>
+                    {[
+                      data.shippingAddress.line1,
+                      data.shippingAddress.line2,
+                      [data.shippingAddress.city, data.shippingAddress.state]
+                        .filter(Boolean)
+                        .join(', '),
+                      data.shippingAddress.postcode,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </AppText>
+                  {!!data.shippingAddress.phone && (
+                    <View style={styles.addressPhone}>
+                      <Ionicons
+                        name="call-outline"
+                        size={13}
+                        color={theme.colors.secondary}
+                      />
+                      <AppText style={styles.addressText}>
+                        {data.shippingAddress.phone}
+                      </AppText>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeading}>
+                <AppText style={shop.heading}>Items</AppText>
+                <AppText style={styles.sectionCount}>
+                  {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                </AppText>
+              </View>
+              {data.items.map(item => (
+                <OrderItemRow
+                  key={item.id}
+                  item={item}
+                  canRate={data.orderStatus.toLowerCase() === 'delivered'}
+                />
+              ))}
             </View>
 
             <View style={styles.section}>
@@ -879,7 +1028,7 @@ export default function OrderDetailScreen() {
   );
 }
 const styles = StyleSheet.create({
-  body: { padding: 16, gap: 16 },
+  body: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 24, gap: 12 },
   section: {
     gap: 8,
     padding: 14,
@@ -888,22 +1037,149 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.card,
     backgroundColor: '#FFFFFF',
   },
-  statusPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statusPill: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
-  statusPillText: { fontSize: 11, fontFamily: theme.fonts.semibold },
+  heroCard: {
+    gap: 9,
+    padding: 13,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDEBE8',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroEyebrow: {
+    color: theme.colors.secondary,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    fontFamily: theme.fonts.semibold,
+  },
+  heroTitle: {
+    marginTop: 2,
+    color: theme.colors.text,
+    fontSize: 17,
+    lineHeight: 21,
+    fontFamily: theme.fonts.bold,
+  },
+  heroMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    columnGap: 8,
+    rowGap: 3,
+    paddingLeft: 50,
+  },
+  heroOrderNumber: {
+    flexShrink: 1,
+    color: theme.colors.text,
+    fontSize: 12,
+    fontFamily: theme.fonts.medium,
+  },
+  heroDate: { color: theme.colors.secondary, fontSize: 11 },
+  heroDivider: { height: 1, backgroundColor: '#EEF1F3' },
+  heroBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  heroPayment: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  paymentDot: { width: 8, height: 8, borderRadius: 4 },
+  heroPaymentStatus: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
+  },
+  heroPaymentMethod: { color: theme.colors.secondary, fontSize: 11, marginTop: 1 },
+  heroTotal: { alignItems: 'flex-end' },
+  heroTotalLabel: { color: theme.colors.secondary, fontSize: 11 },
+  heroTotalValue: {
+    marginTop: 1,
+    color: theme.colors.text,
+    fontSize: 16,
+    fontFamily: theme.fonts.bold,
+  },
+  sectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sectionCount: {
+    color: theme.colors.secondary,
+    fontSize: 11,
+    fontFamily: theme.fonts.medium,
+  },
+  addressHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  addressIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  addressHint: { marginTop: 1, color: theme.colors.secondary, fontSize: 11 },
+  addressType: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#F3F4F6',
+  },
+  addressTypeText: {
+    color: '#4B5563',
+    fontSize: 10,
+    fontFamily: theme.fonts.medium,
+    textTransform: 'capitalize',
+  },
+  addressBody: {
+    marginLeft: 43,
+    gap: 3,
+  },
+  addressName: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
+  },
+  addressText: { color: '#4B5563', fontSize: 12, lineHeight: 17 },
+  addressPhone: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  itemBlock: { gap: 7 },
   itemRow: {
     flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-    paddingVertical: 6,
+    gap: 10,
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F1F3',
   },
   itemImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    backgroundColor: '#F0F1F3',
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFA',
   },
-  itemName: { fontFamily: theme.fonts.medium, fontSize: 14 },
+  itemDescription: { flex: 1, minWidth: 0, gap: 2 },
+  itemName: {
+    flexShrink: 1,
+    color: theme.colors.text,
+    fontFamily: theme.fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   itemPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -925,7 +1201,37 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.semibold,
     fontSize: 14,
     alignSelf: 'flex-start',
+    maxWidth: 88,
+    textAlign: 'right',
   },
+  rateRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginLeft: 58,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F1F3',
+  },
+  ratePrompt: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  rateLabel: { color: theme.colors.secondary, fontSize: 11 },
+  rateStars: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  rateSubmit: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  rateSubmitText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontFamily: theme.fonts.semibold,
+  },
+  ratingSaved: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ratingSavedText: { color: '#15803D', fontSize: 11, fontFamily: theme.fonts.medium },
+  rateError: { flex: 1, color: theme.colors.danger, fontSize: 10 },
   summaryValue: {
     fontFamily: theme.fonts.medium,
     fontSize: 14,

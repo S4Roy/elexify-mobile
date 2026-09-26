@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
 import {
   changePassword,
+  cancelEmailChange,
   confirmAccountDeletion,
   fetchAccountDeletionStatus,
   requestAccountDeletion,
@@ -27,6 +28,10 @@ function useInvalidateAccount() {
 
 export function useRequestEmailChange() {
   return useMutation({ mutationFn: (email: string) => requestEmailChange(email) });
+}
+export function useCancelEmailChange() {
+  const invalidate = useInvalidateAccount();
+  return useMutation({ mutationFn: cancelEmailChange, onSuccess: invalidate });
 }
 export function useVerifyEmailChange() {
   const invalidate = useInvalidateAccount();

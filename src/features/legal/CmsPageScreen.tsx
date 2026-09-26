@@ -9,7 +9,7 @@ import RenderHtml from '@native-html/render';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { AppText } from '../../components/ui';
-import { ShopHeader, shop } from '../../components/shop';
+import { ShopHeader, SkeletonBlock, shop } from '../../components/shop';
 import { theme } from '../../theme';
 import { QueryState } from '../catalog/QueryState';
 import { fetchCmsPage } from '../../api/cms';
@@ -47,6 +47,39 @@ const htmlBaseStyle = {
   color: theme.colors.text,
 };
 
+function CmsPageSkeleton() {
+  return (
+    <View
+      accessibilityLabel="Loading page content"
+      accessibilityLiveRegion="polite"
+      importantForAccessibility="no-hide-descendants"
+      style={styles.cmsSkeleton}
+    >
+      <View style={styles.heroSkeleton}>
+        <SkeletonBlock style={styles.skeletonEyebrow} />
+        <SkeletonBlock style={styles.skeletonTitle} />
+        <View style={styles.skeletonTextGroup}>
+          <SkeletonBlock style={styles.skeletonParagraph} />
+          <SkeletonBlock style={styles.skeletonParagraphMedium} />
+        </View>
+      </View>
+
+      <View style={styles.contentSkeleton}>
+        {[0, 1, 2].map(section => (
+          <View key={section} style={styles.skeletonSection}>
+            <SkeletonBlock style={styles.skeletonSectionTitle} />
+            <View style={styles.skeletonTextGroup}>
+              <SkeletonBlock style={styles.skeletonParagraph} />
+              <SkeletonBlock style={styles.skeletonParagraph} />
+              <SkeletonBlock style={styles.skeletonParagraphShort} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function CmsPageScreen() {
   const { width } = useWindowDimensions();
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -66,6 +99,7 @@ export default function CmsPageScreen() {
           retry={() => {
             query.refetch().catch(() => undefined);
           }}
+          skeleton={<CmsPageSkeleton />}
         />
         {query.data && (
           <View style={styles.hero}>
@@ -104,6 +138,37 @@ export default function CmsPageScreen() {
 
 const styles = StyleSheet.create({
   body: { padding: 16, paddingBottom: 32, gap: 16 },
+  cmsSkeleton: { gap: 16 },
+  heroSkeleton: {
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: 16,
+    padding: 18,
+    gap: 10,
+  },
+  contentSkeleton: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    padding: 18,
+    gap: 22,
+  },
+  skeletonSection: { gap: 12 },
+  skeletonTextGroup: { gap: 8 },
+  skeletonEyebrow: {
+    height: 10,
+    width: 92,
+    backgroundColor: '#B9DED8',
+  },
+  skeletonTitle: {
+    height: 25,
+    width: '66%',
+    backgroundColor: '#B9DED8',
+  },
+  skeletonSectionTitle: { height: 17, width: '54%' },
+  skeletonParagraph: { height: 12, width: '100%' },
+  skeletonParagraphMedium: { height: 12, width: '78%', backgroundColor: '#B9DED8' },
+  skeletonParagraphShort: { height: 12, width: '62%' },
   hero: {
     backgroundColor: theme.colors.primaryLight,
     borderRadius: 16,

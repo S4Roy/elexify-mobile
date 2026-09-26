@@ -4,6 +4,9 @@ import { record } from './discovery';
 export async function requestEmailChange(email: string): Promise<void> {
   await api.post('user/account/email/request-change', { email });
 }
+export async function cancelEmailChange(): Promise<void> {
+  await api.post('user/account/email/cancel-change', {});
+}
 export async function verifyEmailChange(otp: string): Promise<void> {
   await api.post('user/account/email/verify', { otp });
 }

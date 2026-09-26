@@ -33,29 +33,28 @@ export function QueryState({
           accessibilityLiveRegion="polite"
           style={styles.connectionCard}
         >
-          <View style={styles.connectionHeading}>
-            <View style={styles.connectionIcon}>
-              <Ionicons
-                name="cloud-offline-outline"
-                size={23}
-                color={theme.colors.primaryDark}
-              />
-            </View>
-            <View style={styles.connectionCopy}>
-              <AppText accessibilityRole="header" style={styles.connectionTitle}>
-                We couldn’t load this
-              </AppText>
-              <AppText style={styles.connectionHint}>Connection problem</AppText>
-            </View>
+          <View style={styles.connectionIcon}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={21}
+              color={theme.colors.primaryDark}
+            />
           </View>
-          <AppText style={styles.connectionMessage}>
-            Check your internet connection, then try again. Your account and items are safe.
+          <AppText accessibilityRole="header" style={styles.connectionTitle}>
+            Unable to load
           </AppText>
-          <Button
-            label="Try again"
-            onPress={retry}
-            icon={<Ionicons name="refresh-outline" size={18} color="#FFFFFF" />}
-          />
+          <AppText style={styles.connectionMessage}>
+            Check your connection and try again.
+          </AppText>
+          <View style={styles.retryAction}>
+            <Button
+              label="Try again"
+              onPress={retry}
+              icon={
+                <Ionicons name="refresh-outline" size={18} color="#FFFFFF" />
+              }
+            />
+          </View>
         </View>
       );
     }
@@ -83,34 +82,37 @@ export function QueryState({
 
 const styles = StyleSheet.create({
   connectionCard: {
-    padding: 18,
-    gap: 14,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+    padding: 16,
+    gap: 10,
     borderWidth: 1,
     borderColor: '#D8EAE7',
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: '#F8FCFB',
   },
-  connectionHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   connectionIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.primaryLight,
   },
-  connectionCopy: { flex: 1, gap: 2 },
   connectionTitle: {
     fontFamily: theme.fonts.semibold,
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: 'center',
     color: theme.colors.text,
   },
-  connectionHint: {
-    fontFamily: theme.fonts.medium,
-    fontSize: 12,
-    lineHeight: 17,
-    color: theme.colors.primaryDark,
+  connectionMessage: {
+    color: theme.colors.secondary,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
   },
-  connectionMessage: { color: theme.colors.secondary, fontSize: 14, lineHeight: 21 },
+  retryAction: { width: '100%' },
 });

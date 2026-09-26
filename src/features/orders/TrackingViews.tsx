@@ -27,7 +27,6 @@ import {
   groupEventsByDay,
   latestTrackingEvent,
   relativeDay,
-  trackingHeadline,
 } from './trackingFormat';
 
 // React Native ports of elexify.online src/components/tracking/*
@@ -590,6 +589,15 @@ export function TrackingSummaryCard({
 }) {
   const latest = latestTrackingEvent(data);
   const shipments = data.shipments.length;
+  const current =
+    data.milestones.find(m => m.state === 'current') ??
+    [...data.milestones].reverse().find(m => m.state === 'done') ??
+    data.milestones[0];
+  const next = data.milestones.find(m => m.state === 'upcoming');
+  const reachedCount = data.milestones.filter(m => m.state !== 'upcoming').length;
+  const progress = data.milestones.length
+    ? Math.max(0.08, reachedCount / data.milestones.length)
+    : 0;
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
@@ -598,8 +606,25 @@ export function TrackingSummaryCard({
           <AppText style={styles.cardSub}>{shipments} shipments</AppText>
         )}
       </View>
-      <AppText style={styles.summaryHeadline}>{trackingHeadline(data)}</AppText>
-      <MilestoneStepper milestones={data.milestones} compact />
+      {!!current && (
+        <View style={styles.compactProgress}>
+          <View style={styles.compactProgressHead}>
+            <View style={styles.flex}>
+              <AppText style={styles.compactCurrentLabel}>CURRENT STEP</AppText>
+              <AppText style={styles.compactCurrent}>{current.label}</AppText>
+            </View>
+            <AppText style={styles.compactStepCount}>
+              {reachedCount} of {data.milestones.length}
+            </AppText>
+          </View>
+          <View style={styles.compactTrack}>
+            <View style={[styles.compactFill, { width: `${progress * 100}%` }]} />
+          </View>
+          <AppText style={styles.compactNext}>
+            {next ? `Next: ${next.label}` : 'You’re all caught up'}
+          </AppText>
+        </View>
+      )}
       {latest && (
         <View style={styles.latest}>
           <Ionicons
@@ -906,6 +931,39 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
+  compactProgress: {
+    gap: 6,
+    padding: 11,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFA',
+  },
+  compactProgressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  compactCurrentLabel: {
+    fontSize: 9,
+    letterSpacing: 0.6,
+    color: C.muted,
+    fontFamily: theme.fonts.semibold,
+  },
+  compactCurrent: {
+    marginTop: 1,
+    color: C.text,
+    fontSize: 13,
+    fontFamily: theme.fonts.semibold,
+  },
+  compactStepCount: { color: C.muted, fontSize: 10 },
+  compactTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    backgroundColor: C.line,
+  },
+  compactFill: { height: 4, borderRadius: 2, backgroundColor: C.primary },
+  compactNext: { color: C.muted, fontSize: 11 },
   latestTitle: {
     fontSize: 13,
     lineHeight: 19,

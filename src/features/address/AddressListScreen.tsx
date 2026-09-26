@@ -191,6 +191,7 @@ export default function AddressListScreen() {
               setActionError(null);
               confirm({
                 title: 'Delete address?',
+                icon: 'trash-outline',
                 subtitle: item.fullName,
                 message:
                   'This address will be removed from your saved addresses.',
