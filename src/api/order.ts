@@ -49,12 +49,14 @@ export async function placeOrder(params: {
   couponCode?: string;
   isDirectCheckout?: boolean;
   idempotencyKey: string;
+  partialCodConsent?: { accepted: boolean; version: string; advance_amount: number; grand_total: number };
   expectedTotal?: number;
 }): Promise<PlaceOrderResult> {
   const res = await api.post('site/inventory/order/place', {
     address_id: params.addressId,
     payment_method: params.paymentMethod,
     currency: 'INR',
+    ...(params.partialCodConsent ? { partial_cod_consent: params.partialCodConsent } : {}),
     ...(params.couponCode ? { coupon_code: params.couponCode } : {}),
     isDirectCheckout: params.isDirectCheckout ?? false,
     idempotency_key: params.idempotencyKey,

@@ -26,6 +26,7 @@ export type CodEligibility = {
   code: string | null;
   minOrder: number | null;
   maxOrder: number | null;
+  consent?: { required: boolean; available: boolean; version: string; wording: string; policies: { path: string; title: string }[] } | null;
   advanceEnabled: boolean;
   advancePercent: number;
 };
@@ -118,6 +119,13 @@ export function parseCartSummary(value: unknown): CartSummary {
           code: string(cod.code) || null,
           minOrder: number(cod.min_order),
           maxOrder: number(cod.max_order),
+          consent: cod.consent ? {
+            required: record(cod.consent).required === true,
+            available: record(cod.consent).available === true,
+            version: string(record(cod.consent).version),
+            wording: string(record(cod.consent).wording),
+            policies: Array.isArray(record(cod.consent).policies) ? (record(cod.consent).policies as unknown[]).map(p => ({ path: string(record(p).path), title: string(record(p).title) })) : [],
+          } : null,
           advanceEnabled: cod.advance_enabled === true,
           advancePercent: number(cod.advance_percent) ?? 0,
         }

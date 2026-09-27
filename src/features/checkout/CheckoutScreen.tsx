@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Linking,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -472,6 +473,11 @@ export default function CheckoutScreen() {
     paymentMethod === 'cod' &&
     !!effectiveCod?.eligible &&
     !!effectiveCod.advanceEnabled;
+  const consentTerms = isPartialCod ? effectiveCod?.consent : null;
+  const [acceptedConsentKey, setAcceptedConsentKey] = useState<string | null>(null);
+  const consentKey = JSON.stringify([paymentMethod, addressId, total, consentTerms?.version]);
+  const consentAccepted = acceptedConsentKey === consentKey;
+  useEffect(() => { setAcceptedConsentKey(null); }, [consentKey]);
   const advancePercent = isPartialCod ? effectiveCod!.advancePercent : 0;
   const advanceAmount = isPartialCod
     ? Number((total * (advancePercent / 100)).toFixed(2))
@@ -516,6 +522,10 @@ export default function CheckoutScreen() {
     if (!addressId || !data || data.items.length === 0) {
       return;
     }
+    if (consentTerms?.required && (!consentTerms.available || !consentAccepted)) {
+      setError('Please review and accept the Partial COD terms before placing your order.');
+      return;
+    }
     setError(null);
     setPlacing(true);
     const idempotencyMode = isDirectCheckout ? 'direct' : 'cart';
@@ -526,6 +536,7 @@ export default function CheckoutScreen() {
         paymentMethod,
         couponCode: couponResult?.code ?? null,
         isDirectCheckout,
+        consentVersion: consentTerms?.version,
         total: roundedTotal,
       });
       const idempotencyKey = await getIdempotencyKey(
@@ -538,6 +549,9 @@ export default function CheckoutScreen() {
         couponCode: couponResult?.code,
         isDirectCheckout,
         idempotencyKey,
+        partialCodConsent: consentTerms?.required && consentAccepted ? {
+          accepted: true, version: consentTerms.version, advance_amount: advanceAmount, grand_total: roundedTotal,
+        } : undefined,
         expectedTotal: roundedTotal,
       });
       if (result.razorpay) {
@@ -638,6 +652,10 @@ export default function CheckoutScreen() {
       ) {
         await clearIdempotencyKey(idempotencyMode);
       }
+      if (/PARTIAL_COD_CONSENT_|CHECKOUT_TOTAL_CHANGED/.test(message)) {
+        setAcceptedConsentKey(null);
+        await cart.refetch();
+      }
       setError(message);
     } finally {
       setPlacing(false);
@@ -647,6 +665,7 @@ export default function CheckoutScreen() {
   const codSelectedButIneligible =
     paymentMethod === 'cod' && !!effectiveCod && !effectiveCod.eligible;
   const ctaDisabled =
+    (consentTerms?.required && (!consentAccepted || !consentTerms.available)) ||
     placing ||
     recalculating ||
     !data ||
@@ -1059,6 +1078,23 @@ export default function CheckoutScreen() {
                     {recalculating ? 'Calculating…' : money(total)}
                   </AppText>
                 </View>
+            {consentTerms?.required && (
+              <View style={{ padding: 12 }}>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: consentAccepted, disabled: placing || !consentTerms.available }}
+                  disabled={placing || !consentTerms.available} onPress={() => setAcceptedConsentKey(consentAccepted ? null : consentKey)}
+                  style={{ flexDirection: 'row', gap: 8 }}>
+                  <Ionicons name={consentAccepted ? 'checkbox' : 'square-outline'} size={24} color={theme.colors.primary} />
+                  <AppText style={{ flex: 1 }}>{consentTerms.wording}</AppText>
+                </Pressable>
+                {consentTerms.policies.map(policy => (
+                  <Pressable key={policy.path} accessibilityRole="link" onPress={() => { void Linking.openURL(`https://elexify.online${policy.path}`).catch(() => setError('Unable to open policy. Please try again.')); }}>
+                    <AppText style={{ color: theme.colors.primary, textDecorationLine: 'underline', paddingVertical: 4 }}>{policy.title}</AppText>
+                  </Pressable>
+                ))}
+                {!consentTerms.available && <AppText>Policies are unavailable. Choose online payment or contact support.</AppText>}
+                {consentTerms.available && !consentAccepted && <AppText>Please accept the terms to continue with Partial COD.</AppText>}
+              </View>
+            )}
                 {isPartialCod && !recalculating && (
                   <View style={styles.advanceBox}>
                     <View style={shop.between}>
