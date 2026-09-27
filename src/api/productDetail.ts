@@ -213,6 +213,8 @@ export type Review = {
   rating: number;
   description: string;
   userName: string;
+  verifiedPurchase: boolean;
+  title: string;
   createdAt: string;
   media: string[];
 };
@@ -229,6 +231,8 @@ function parseReview(value: unknown): Review | null {
     rating,
     description: string(r.description),
     userName: string(record(r.user).name) || 'Elexify customer',
+    verifiedPurchase: r.verified_purchase === true,
+    title: string(r.title),
     createdAt: string(r.created_at),
     media: media.map(imageUrl).filter((u): u is string => !!u),
   };
@@ -253,19 +257,21 @@ export async function fetchReviews(
   productId: string,
   variationId: string | undefined,
   signal?: AbortSignal,
+  page = 1,
 ) {
   const res = await api.get('site/cms/ratings', {
     params: {
+      page, limit: 20,
       product_id: productId,
       ...(variationId ? { variation_id: variationId } : {}),
     },
     signal,
   });
-  const docs = res.data?.data?.docs;
-  if (!Array.isArray(docs)) {
-    return [];
-  }
-  return docs.map(parseReview).filter((r): r is Review => r !== null);
+  const data = res.data?.data;
+  const docs = Array.isArray(data?.docs) ? data.docs : [];
+  return { docs: docs.map(parseReview).filter((r: Review | null): r is Review => r !== null),
+    nextPage: data?.hasNextPage ? page + 1 : undefined };
+
 }
 
 export type DeliveryEstimate = {

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
 import { uploadMedia, type PickedImage } from '../../api/media';
 import {
@@ -27,10 +27,11 @@ export function useSpecifications(slug: string) {
   });
 }
 export function useReviews(productId?: string, variationId?: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['product-reviews', productId ?? '', variationId ?? ''],
-    queryFn: ({ signal }) =>
-      fetchReviews(productId as string, variationId, signal),
+    initialPageParam: 1,
+    queryFn: ({ signal, pageParam }) => fetchReviews(productId as string, variationId, signal, pageParam),
+    getNextPageParam: lastPage => lastPage.nextPage,
     enabled: !!apiConfig.baseUrl && !!productId,
   });
 }

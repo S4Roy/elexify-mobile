@@ -423,6 +423,7 @@ function ReviewCard({
           <AppText numberOfLines={1} style={styles.reviewName}>
             {review.userName}
           </AppText>
+          {review.verifiedPurchase && <AppText style={styles.reviewDate}>Verified Purchase</AppText>}
           <View style={styles.reviewMeta}>
             <View
               style={[
@@ -439,6 +440,7 @@ function ReviewCard({
           </View>
         </View>
       </View>
+      {!!review.title && <AppText style={styles.reviewName}>{review.title}</AppText>}
       {!!review.description && (
         <AppText style={styles.reviewText}>{review.description}</AppText>
       )}
@@ -701,7 +703,7 @@ export default function ProductDetailScreen() {
       },
     );
 
-  const reviewList = reviews.data ?? [];
+  const reviewList = reviews.data?.pages.flatMap(page => page.docs) ?? [];
   const visibleReviews = allReviews
     ? reviewList
     : reviewList.slice(0, REVIEW_PREVIEW);
@@ -1364,11 +1366,13 @@ export default function ProductDetailScreen() {
                   }
                 />
               ))}
+              {reviews.hasNextPage && <Button label={reviews.isFetchingNextPage ? 'Loading…' : 'Load more reviews'} disabled={reviews.isFetchingNextPage} onPress={() => { setAllReviews(true); reviews.fetchNextPage().catch(() => undefined); }} />}
+              {reviews.isError && <Button label="Retry loading reviews" onPress={() => { reviews.refetch().catch(() => undefined); }} />}
               {reviewList.length > REVIEW_PREVIEW && (
                 <TextToggle
                   expanded={allReviews}
                   onPress={() => setAllReviews(o => !o)}
-                  more={`See all ${reviewList.length} reviews`}
+                  more={`See ${reviewList.length} loaded reviews`}
                   less="Show fewer reviews"
                 />
               )}
