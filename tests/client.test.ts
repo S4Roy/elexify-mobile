@@ -1,3 +1,6 @@
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
 jest.mock('../src/api/config', () => ({
   apiConfig: {
     baseUrl: 'https://example.test/api/v1/',
