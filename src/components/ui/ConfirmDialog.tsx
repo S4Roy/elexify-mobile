@@ -26,6 +26,13 @@ export type ConfirmOptions = {
   /** Red destructive styling for the confirm button. Defaults to true — most
    * confirmations in this app (delete, sign out) are destructive/irreversible. */
   destructive?: boolean;
+  /** false hides Close/Cancel and ignores the backdrop and Android back
+   * button, e.g. for a required app update. Defaults to true. */
+  dismissible?: boolean;
+  /** Keep the dialog open after onConfirm succeeds (e.g. after opening the store). */
+  keepOpenOnConfirm?: boolean;
+  /** Called when the user dismisses the dialog (Cancel, Close, backdrop, back). */
+  onCancel?: () => void;
   onConfirm: () => Promise<void> | void;
 };
 
@@ -38,6 +45,7 @@ type ConfirmState = {
 const ConfirmContext = createContext<
   ((options: ConfirmOptions) => void) | null
 >(null);
+const DismissContext = createContext<(() => void) | null>(null);
 
 export function useConfirm() {
   const confirm = useContext(ConfirmContext);
@@ -45,6 +53,15 @@ export function useConfirm() {
     throw new Error('useConfirm must be used within a ConfirmProvider');
   }
   return confirm;
+}
+
+/** Closes the open dialog programmatically, even a non-dismissible one. */
+export function useDismissConfirm() {
+  const dismiss = useContext(DismissContext);
+  if (!dismiss) {
+    throw new Error('useDismissConfirm must be used within a ConfirmProvider');
+  }
+  return dismiss;
 }
 
 export function ConfirmProvider({ children }: React.PropsWithChildren) {
@@ -56,11 +73,15 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
     setState({ options, pending: false, error: null });
   }, []);
 
+  const dismiss = useCallback(() => setState(null), []);
+
   const close = () => {
-    if (stateRef.current?.pending) {
+    const current = stateRef.current;
+    if (!current || current.pending || current.options.dismissible === false) {
       return;
     }
     setState(null);
+    current.options.onCancel?.();
   };
 
   const handleConfirm = async () => {
@@ -71,8 +92,11 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
       current ? { ...current, pending: true, error: null } : current,
     );
     try {
-      await stateRef.current.options.onConfirm();
-      setState(null);
+      const { onConfirm, keepOpenOnConfirm } = stateRef.current.options;
+      await onConfirm();
+      setState(current =>
+        keepOpenOnConfirm && current ? { ...current, pending: false } : null,
+      );
     } catch (err) {
       setState(current =>
         current
@@ -91,114 +115,126 @@ export function ConfirmProvider({ children }: React.PropsWithChildren) {
 
   const destructive = state?.options.destructive ?? true;
   const iconColor = destructive ? theme.colors.danger : theme.colors.primary;
+  const dismissible = state?.options.dismissible !== false;
 
   return (
     <ConfirmContext.Provider value={confirm}>
-      {children}
-      <Modal
-        visible={!!state}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={close}
-      >
-        <View style={styles.root}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
-            onPress={close}
-            style={styles.backdrop}
-          />
-          <View style={styles.sheet} accessibilityViewIsModal>
-            <View style={styles.heading}>
-              <View
-                style={[
-                  styles.iconBadge,
-                  destructive ? styles.iconBadgeDestructive : styles.iconBadgePrimary,
-                ]}
-              >
-                <Ionicons
-                  name={
-                    state?.options.icon ??
-                    (destructive ? 'alert-circle-outline' : 'information-circle-outline')
-                  }
-                  size={22}
-                  color={iconColor}
-                />
+      <DismissContext.Provider value={dismiss}>
+        {children}
+        <Modal
+          visible={!!state}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={close}
+        >
+          <View style={styles.root}>
+            <Pressable
+              accessibilityRole={dismissible ? 'button' : undefined}
+              accessibilityLabel={dismissible ? 'Dismiss' : undefined}
+              disabled={!dismissible}
+              onPress={close}
+              style={styles.backdrop}
+            />
+            <View style={styles.sheet} accessibilityViewIsModal>
+              <View style={styles.heading}>
+                <View
+                  style={[
+                    styles.iconBadge,
+                    destructive
+                      ? styles.iconBadgeDestructive
+                      : styles.iconBadgePrimary,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      state?.options.icon ??
+                      (destructive
+                        ? 'alert-circle-outline'
+                        : 'information-circle-outline')
+                    }
+                    size={22}
+                    color={iconColor}
+                  />
+                </View>
+                <View style={styles.headingText}>
+                  <AppText accessibilityRole="header" style={styles.title}>
+                    {state?.options.title}
+                  </AppText>
+                  {!!state?.options.subtitle && (
+                    <AppText style={styles.subtitle}>
+                      {state.options.subtitle}
+                    </AppText>
+                  )}
+                </View>
+                {dismissible && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    accessibilityState={{ disabled: state?.pending }}
+                    disabled={state?.pending}
+                    onPress={close}
+                    style={styles.closeButton}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={22}
+                      color={theme.colors.secondary}
+                    />
+                  </Pressable>
+                )}
               </View>
-              <View style={styles.headingText}>
-                <AppText accessibilityRole="header" style={styles.title}>
-                  {state?.options.title}
-                </AppText>
-                {!!state?.options.subtitle && (
-                  <AppText style={styles.subtitle}>
-                    {state.options.subtitle}
+              <View style={styles.body}>
+                {!!state?.options.message && (
+                  <AppText style={styles.message}>
+                    {state.options.message}
                   </AppText>
                 )}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                accessibilityState={{ disabled: state?.pending }}
-                disabled={state?.pending}
-                onPress={close}
-                style={styles.closeButton}
-              >
-                <Ionicons
-                  name="close"
-                  size={22}
-                  color={theme.colors.secondary}
-                />
-              </Pressable>
-            </View>
-            <View style={styles.body}>
-              {!!state?.options.message && (
-                <AppText style={styles.message}>
-                  {state.options.message}
-                </AppText>
-              )}
-              {!!state?.error && (
-                <AppText accessibilityRole="alert" style={styles.error}>
-                  {state.error}
-                </AppText>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: state?.pending }}
-                disabled={state?.pending}
-                onPress={handleConfirm}
-                style={[
-                  styles.confirmButton,
-                  destructive
-                    ? styles.confirmButtonDestructive
-                    : styles.confirmButtonPrimary,
-                  state?.pending && styles.disabled,
-                ]}
-              >
-                {state?.pending && (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                {!!state?.error && (
+                  <AppText accessibilityRole="alert" style={styles.error}>
+                    {state.error}
+                  </AppText>
                 )}
-                <AppText style={styles.confirmButtonText}>
-                  {state?.pending
-                    ? 'Please wait…'
-                    : state?.options.confirmLabel ?? 'Confirm'}
-                </AppText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: state?.pending }}
-                disabled={state?.pending}
-                onPress={close}
-                style={styles.cancelButton}
-              >
-                <AppText style={styles.cancelText}>
-                  {state?.options.cancelLabel ?? 'Cancel'}
-                </AppText>
-              </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: state?.pending }}
+                  disabled={state?.pending}
+                  onPress={handleConfirm}
+                  style={[
+                    styles.confirmButton,
+                    destructive
+                      ? styles.confirmButtonDestructive
+                      : styles.confirmButtonPrimary,
+                    state?.pending && styles.disabled,
+                  ]}
+                >
+                  {state?.pending && (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  )}
+                  <AppText style={styles.confirmButtonText}>
+                    {state?.pending
+                      ? 'Please wait…'
+                      : state?.options.confirmLabel ?? 'Confirm'}
+                  </AppText>
+                </Pressable>
+                {dismissible && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: state?.pending }}
+                    disabled={state?.pending}
+                    onPress={close}
+                    style={styles.cancelButton}
+                  >
+                    <AppText style={styles.cancelText}>
+                      {state?.options.cancelLabel ?? 'Cancel'}
+                    </AppText>
+                  </Pressable>
+                )}
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      </DismissContext.Provider>
     </ConfirmContext.Provider>
   );
 }

@@ -1,28 +1,50 @@
-import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  AppState,
-  Linking,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import axios from 'axios';
 import { apiConfig } from '../../api/config';
-import { parsePolicy, requiresUpdate, UpdatePolicy } from './policy';
+import {
+  useConfirm,
+  useDismissConfirm,
+} from '../../components/ui/ConfirmDialog';
+import {
+  parsePolicy,
+  shouldPromptOptional,
+  SkippedUpdate,
+  updateKind,
+  UpdatePolicy,
+} from './policy';
 
 const supported = Platform.OS === 'android' || Platform.OS === 'ios';
-const cacheKey = `mobile-update-policy:v1:${Platform.OS}:${apiConfig.baseUrl}`;
+const cacheKey = `mobile-update-policy:v2:${Platform.OS}:${apiConfig.baseUrl}`;
+const skipKey = `mobile-update-skip:${Platform.OS}`;
+
+async function readSkip(): Promise<SkippedUpdate | null> {
+  try {
+    const raw = await AsyncStorage.getItem(skipKey);
+    const value = raw ? JSON.parse(raw) : null;
+    return typeof value?.version === 'string' && typeof value?.at === 'number'
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Admin-managed app updates (Admin → Settings → App Updates):
+ * below the minimum version a blocking dialog requires the update; below the
+ * latest version a dialog offers it with "Later", re-offered after the
+ * admin's reminder interval.
+ */
 export function UpdateGate({ children }: React.PropsWithChildren) {
+  const confirm = useConfirm();
+  const dismiss = useDismissConfirm();
   const [policy, setPolicy] = useState<UpdatePolicy | null>(null);
-  const [ready, setReady] = useState(!supported);
-  const [error, setError] = useState('');
-  const [attempt, setAttempt] = useState(0);
+  // Which prompt is on screen, so re-checks don't re-open or flash it.
+  const shown = useRef<string | null>(null);
+
   useEffect(() => {
     if (!supported) return;
     let active = true;
@@ -32,33 +54,26 @@ export function UpdateGate({ children }: React.PropsWithChildren) {
       if (pending || !active) return;
       pending = true;
       try {
-        if (!apiConfig.baseUrl) throw new Error('Missing API URL');
+        if (!apiConfig.baseUrl) return;
         const response = await axios.get(
           `${apiConfig.baseUrl}mobile/update-policy`,
           {
-            params: { platform: Platform.OS },
+            params: { platform: Platform.OS, schema: 2 },
             timeout: 8000,
             signal: controller.signal,
           },
         );
         const next = parsePolicy(response.data, Platform.OS);
-        if (!next) throw new Error('Invalid policy');
-        if (active) {
-          setPolicy(next);
-          setError('');
-        }
+        if (!next) return;
+        if (active) setPolicy(next);
         await AsyncStorage.setItem(cacheKey, JSON.stringify(next)).catch(
           () => undefined,
         );
       } catch {
-        // Keep the last validated policy, including a previously required update.
-        if (active)
-          setError(
-            'Unable to check for updates. Check your connection and try again.',
-          );
+        // Offline or unavailable: keep the last validated policy, including a
+        // previously required update.
       } finally {
         pending = false;
-        if (active) setReady(true);
       }
     }
     async function start() {
@@ -84,80 +99,83 @@ export function UpdateGate({ children }: React.PropsWithChildren) {
       subscription.remove();
       clearInterval(timer);
     };
-  }, [attempt]);
-  if (!ready)
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator accessibilityLabel="Checking for updates" />
-      </View>
-    );
-  if (!policy || !requiresUpdate(Application.nativeApplicationVersion, policy))
-    return <>{children}</>;
-  async function openStore() {
-    try {
-      await Linking.openURL(policy!.storeUrl!);
-      setError('');
-    } catch {
-      setError('Unable to open the store. Please try again.');
+  }, []);
+
+  useEffect(() => {
+    if (!policy) return;
+    let cancelled = false;
+    const kind = updateKind(Application.nativeApplicationVersion, policy);
+    const key =
+      kind && `${kind}:${policy.minimumVersion}:${policy.latestVersion}`;
+    if (key === shown.current) return;
+    if (shown.current) {
+      // The admin lowered or lifted the requirement while a prompt was open.
+      shown.current = null;
+      dismiss();
     }
-  }
-  return (
-    <SafeAreaView style={styles.center}>
-      <Text style={styles.title} accessibilityRole="header">
-        Update Elexify to continue
-      </Text>
-      <Text style={styles.message}>
-        This version is no longer supported. Install the latest version to keep
-        shopping.
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={openStore}
-        style={styles.button}
-      >
-        <Text style={styles.buttonText}>Update now</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => setAttempt(value => value + 1)}
-        style={styles.retry}
-      >
-        <Text>Check again</Text>
-      </Pressable>
-      {!!error && (
-        <Text accessibilityRole="alert" style={styles.message}>
-          {error}
-        </Text>
-      )}
-    </SafeAreaView>
-  );
+    if (!kind || !policy.storeUrl) return;
+    const storeUrl = policy.storeUrl;
+    const openStore = async () => {
+      try {
+        await Linking.openURL(storeUrl);
+      } catch {
+        throw new Error('Unable to open the store. Please try again.');
+      }
+    };
+    const show = () => {
+      if (cancelled) return;
+      shown.current = key;
+      if (kind === 'required') {
+        confirm({
+          title: policy.title || 'Update required',
+          subtitle: `Version ${policy.latestVersion} is available`,
+          message:
+            policy.message ||
+            'This version of Elexify is no longer supported. Update to keep shopping.',
+          icon: 'cloud-download-outline',
+          confirmLabel: 'Update now',
+          destructive: false,
+          dismissible: false,
+          keepOpenOnConfirm: true,
+          onConfirm: openStore,
+        });
+        return;
+      }
+      confirm({
+        title: policy.title || 'Update available',
+        subtitle: `Version ${policy.latestVersion} is ready to install`,
+        message:
+          policy.message ||
+          'Get the latest features and improvements in the new version of Elexify.',
+        icon: 'cloud-download-outline',
+        confirmLabel: 'Update now',
+        cancelLabel: 'Later',
+        destructive: false,
+        onConfirm: async () => {
+          shown.current = null;
+          await openStore();
+        },
+        onCancel: () => {
+          shown.current = null;
+          const skip: SkippedUpdate = {
+            version: policy.latestVersion,
+            at: Date.now(),
+          };
+          AsyncStorage.setItem(skipKey, JSON.stringify(skip)).catch(
+            () => undefined,
+          );
+        },
+      });
+    };
+    if (kind === 'required') show();
+    else
+      readSkip().then(skipped => {
+        if (shouldPromptOptional(policy, skipped)) show();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [policy, confirm, dismiss]);
+
+  return <>{children}</>;
 }
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#111827',
-  },
-  message: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginVertical: 20,
-    color: '#4b5563',
-  },
-  button: {
-    backgroundColor: '#111827',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  retry: { padding: 20 },
-});
