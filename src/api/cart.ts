@@ -155,6 +155,16 @@ export async function fetchCart(
   return parseCartSummary(res.data?.data);
 }
 
+/** Store-wide return policy; returns are possible only when enabled with a window. */
+export async function fetchReturnPolicy(
+  signal?: AbortSignal,
+): Promise<{ returnsAvailable: boolean; windowDays: number }> {
+  const res = await api.get('site/inventory/shipping/return-policy', { signal });
+  const data = record(res.data?.data);
+  const windowDays = number(data.window_days) ?? 0;
+  return { returnsAvailable: data.enabled === true && windowDays > 0, windowDays };
+}
+
 export async function manageCart(
   params: { productId: string; variationId?: string; quantity: number },
   direct = false,

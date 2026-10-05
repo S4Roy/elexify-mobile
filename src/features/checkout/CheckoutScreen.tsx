@@ -28,7 +28,7 @@ import type { Address } from '../../api/address';
 import type { CartItem } from '../../api/cart';
 import { useAccount } from '../auth/hooks';
 import { useAddresses } from '../address/hooks';
-import { useApplyCoupon, useCart } from '../cart/hooks';
+import { useApplyCoupon, useCart, useReturnPolicy } from '../cart/hooks';
 import {
   clearIdempotencyKey,
   getIdempotencyKey,
@@ -403,6 +403,7 @@ export default function CheckoutScreen() {
     'razorpay',
   );
   const cart = useCart(addressId, paymentMethod, isDirectCheckout);
+  const returnsAvailable = useReturnPolicy().data?.returnsAvailable === true;
   const data = cart.data;
 
   const [couponCode, setCouponCode] = useState('');
@@ -1138,14 +1139,16 @@ export default function CheckoutScreen() {
                   />
                   <AppText style={styles.trustLabel}>Secure payments</AppText>
                 </View>
-                <View style={styles.trustItem}>
-                  <Ionicons
-                    name="refresh-outline"
-                    size={18}
-                    color={theme.colors.primary}
-                  />
-                  <AppText style={styles.trustLabel}>Easy returns</AppText>
-                </View>
+                {returnsAvailable && (
+                  <View style={styles.trustItem}>
+                    <Ionicons
+                      name="refresh-outline"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                    <AppText style={styles.trustLabel}>Easy returns</AppText>
+                  </View>
+                )}
                 <View style={styles.trustItem}>
                   <Ionicons
                     name="ribbon-outline"

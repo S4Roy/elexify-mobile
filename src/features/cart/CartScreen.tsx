@@ -24,7 +24,12 @@ import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
 import { CartItem } from '../../api/cart';
-import { useCart, useCartMutation, useSaveForLater } from './hooks';
+import {
+  useCart,
+  useCartMutation,
+  useReturnPolicy,
+  useSaveForLater,
+} from './hooks';
 import { useAddresses } from '../address/hooks';
 import { useAlsoLike } from '../product/hooks';
 
@@ -285,6 +290,7 @@ function Recommendations({
 
 export default function CartScreen() {
   const cart = useCart();
+  const returnsAvailable = useReturnPolicy().data?.returnsAvailable === true;
   const mutation = useCartMutation();
   const saveForLater = useSaveForLater();
   const isAuthenticated = useSession(s => s.status === 'authenticated');
@@ -531,7 +537,9 @@ export default function CartScreen() {
               {(
                 [
                   ['shield-checkmark-outline', 'Secure payments'],
-                  ['refresh-outline', 'Easy returns'],
+                  ...(returnsAvailable
+                    ? ([['refresh-outline', 'Easy returns']] as const)
+                    : []),
                   ['ribbon-outline', 'Genuine products'],
                 ] as const
               ).map(([icon, label]) => (

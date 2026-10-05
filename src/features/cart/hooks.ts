@@ -5,7 +5,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { apiConfig } from '../../api/config';
-import { applyCoupon, fetchCart, manageCart } from '../../api/cart';
+import {
+  applyCoupon,
+  fetchCart,
+  fetchReturnPolicy,
+  manageCart,
+} from '../../api/cart';
 import { addToWishlist } from '../../api/wishlist';
 import { useIdentity } from '../catalog/hooks';
 
@@ -24,6 +29,15 @@ export function useCart(
     // so switching either would otherwise blank the screen until the refetch
     // resolves — keep the last totals on screen while the new ones load.
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useReturnPolicy() {
+  return useQuery({
+    queryKey: ['return-policy'],
+    queryFn: ({ signal }) => fetchReturnPolicy(signal),
+    enabled: !!apiConfig.baseUrl,
+    staleTime: 10 * 60 * 1000,
   });
 }
 
