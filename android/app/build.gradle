@@ -135,7 +135,11 @@ android {
             // fallback build must never be uploaded to the Play Store.
             signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Play Console: R8 optimisation + resource shrinking cut memory use
+            // and size. Resources looked up by name are kept by React Native's
+            // generated raw/keep.xml and res/raw/keep_app.xml.
+            shrinkResources enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Resource shrinking: resources looked up by name at runtime. React Native
+     generates its own raw/keep.xml for bundled JS images and fonts; these are
+     the app-level ones Firebase messaging resolves from firebase.json. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@color/notification_color,@drawable/ic_stat_notification" />
