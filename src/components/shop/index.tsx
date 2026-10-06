@@ -707,6 +707,7 @@ export function ShopHeader({
   deliveryLabel,
   scrollY,
   notifications = search,
+  actions = true,
 }: {
   title?: string;
   /** Home variant: large logo; pair with <HomeSearchPanel> as the first item
@@ -723,6 +724,8 @@ export function ShopHeader({
   /** Bell with the unread count. On by default for the home header only —
    * inner screens keep just search + cart, as most shopping apps do. */
   notifications?: boolean;
+  /** false hides search, bell and cart — focused flows such as sign-in. */
+  actions?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const unread = useUnreadNotificationCount();
@@ -792,7 +795,7 @@ export function ShopHeader({
               />
             </View>
           )}
-          {search && reveal ? (
+          {!actions ? null : search && reveal ? (
             <Animated.View
               style={{
                 opacity: reveal,
@@ -819,7 +822,7 @@ export function ShopHeader({
               onPress={() => router.push('/search')}
             />
           )}
-          {notifications && (
+          {actions && notifications && (
             <IconButton
               name="notifications-outline"
               label="Notifications"
@@ -827,13 +830,15 @@ export function ShopHeader({
               onPress={() => router.push('/notifications' as Href)}
             />
           )}
-          <IconButton
-            // Same bag icon everywhere, matching the Cart tab.
-            name="bag-outline"
-            label="Open cart"
-            badge={cartCount}
-            onPress={() => router.push('/cart')}
-          />
+          {actions && (
+            <IconButton
+              // Same bag icon everywhere, matching the Cart tab.
+              name="bag-outline"
+              label="Open cart"
+              badge={cartCount}
+              onPress={() => router.push('/cart')}
+            />
+          )}
         </View>
         {!search && !!deliveryLabel && (
           <DeliveryRow label={deliveryLabel} scale={scale} />

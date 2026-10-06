@@ -41,7 +41,9 @@ export async function verifyOtp(params: {
   return {
     token: accessToken,
     tokenExpirySeconds:
-      typeof token.access_token_expiry === 'number' ? token.access_token_expiry : 3600,
+      typeof token.access_token_expiry === 'number'
+        ? token.access_token_expiry
+        : 3600,
     isNewUser: data.is_new_user === true,
     name: string(record(data.user).name),
   };
@@ -63,7 +65,9 @@ export async function googleLogin(idToken: string): Promise<GoogleLoginResult> {
   return {
     token: accessToken,
     tokenExpirySeconds:
-      typeof token.access_token_expiry === 'number' ? token.access_token_expiry : 3600,
+      typeof token.access_token_expiry === 'number'
+        ? token.access_token_expiry
+        : 3600,
     isNewUser: data.is_new_user === true,
   };
 }
@@ -98,5 +102,19 @@ export async function fetchAccount(signal?: AbortSignal): Promise<Account> {
     mobileVerified: d.mobile_verified === true,
     pendingEmail: string(d.pending_email) || null,
     pendingMobile: string(d.pending_mobile) || null,
+  };
+}
+
+/** Admin switch per platform (Admin → Integration Credentials → Google
+ * Sign-In). null when the setting could not be loaded. */
+export async function fetchGoogleSignInPlatforms(
+  signal?: AbortSignal,
+): Promise<Record<'android' | 'ios' | 'web', boolean> | null> {
+  const res = await api.get('site/common/google-signin', { signal });
+  const platforms = record(record(res.data?.data).platforms);
+  return {
+    android: platforms.android === true,
+    ios: platforms.ios === true,
+    web: platforms.web === true,
   };
 }
