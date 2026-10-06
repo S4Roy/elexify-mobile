@@ -1,3 +1,4 @@
+import { AddressAccessGate } from './AddressAccessGate';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -124,7 +125,7 @@ function AccountField({
   );
 }
 
-export default function AddressFormScreen() {
+function AddressFormScreenContent() {
   // The root reserves Android's navigation bar, so this is 0 there and the
   // home-indicator inset on iOS.
   const insets = useSafeAreaInsets();
@@ -710,3 +711,7 @@ const styles = StyleSheet.create({
   saveDisabled: { opacity: 0.6 },
   saveText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 16 },
 });
+
+export default function AddressFormScreen() {
+  return <AddressAccessGate><AddressFormScreenContent /></AddressAccessGate>;
+}

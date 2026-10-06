@@ -47,7 +47,10 @@ export const useSession = create<Session>(set => ({
           }
         }
         set({ token, guestId, status: token ? 'authenticated' : 'guest' });
-      } catch {
+      } catch (error) {
+        // Logged (release builds too) so a failing native storage call can be
+        // diagnosed from logcat instead of only the generic retry screen.
+        console.error('[session] restore failed', error);
         set({ token: null, guestId: null, status: 'error' });
       }
     }),

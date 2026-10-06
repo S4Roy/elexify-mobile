@@ -1,3 +1,4 @@
+import { AddressAccessGate } from './AddressAccessGate';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -144,7 +145,7 @@ function AddressCard({
   );
 }
 
-export default function AddressListScreen() {
+function AddressListScreenContent() {
   // The root reserves Android's navigation bar, so this is 0 there and the
   // home-indicator inset on iOS.
   const insets = useSafeAreaInsets();
@@ -329,3 +330,7 @@ const styles = StyleSheet.create({
   },
   error: { color: theme.colors.danger, fontSize: 13 },
 });
+
+export default function AddressListScreen() {
+  return <AddressAccessGate><AddressListScreenContent /></AddressAccessGate>;
+}

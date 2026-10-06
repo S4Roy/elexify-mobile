@@ -105,8 +105,8 @@ android {
         applicationId "com.elexify"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "1.0.6"
+        versionCode 8
+        versionName "1.0.7"
     }
     signingConfigs {
         debug {
@@ -135,11 +135,13 @@ android {
             // fallback build must never be uploaded to the Play Store.
             signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
-            // Play Console: R8 optimisation + resource shrinking cut memory use
-            // and size. Resources looked up by name are kept by React Native's
-            // generated raw/keep.xml and res/raw/keep_app.xml.
+            // Resource shrinking; resources looked up by name are kept by React
+            // Native's generated raw/keep.xml and res/raw/keep_app.xml.
             shrinkResources enableProguardInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // Not proguard-android-optimize.txt: R8 optimisation rewrites Expo's
+            // Kotlin Record classes so kotlin-reflect can't convert JS options
+            // (SecureStore failed on launch: "Unable to restore your session").
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
 }

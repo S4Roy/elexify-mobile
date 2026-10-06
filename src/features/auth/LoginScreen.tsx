@@ -66,6 +66,8 @@ export default function LoginScreen() {
   // continue — never on an empty field (e.g. when tapping Google instead).
   const [showMobileError, setShowMobileError] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
   const mobileRef = useRef<TextInput>(null);
   const lastNameRef = useRef<TextInput>(null);
   const sendOtp = useSendOtp();
@@ -147,6 +149,12 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          scrollEnabled={contentHeight > viewportHeight + 1}
+          onLayout={event => setViewportHeight(event.nativeEvent.layout.height)}
+          onContentSizeChange={(_width, height) => setContentHeight(height)}
         >
           {step === 'identity' ? (
             <>
@@ -213,7 +221,6 @@ export default function LoginScreen() {
                     returnKeyType="done"
                     placeholder="Enter 10-digit number"
                     placeholderTextColor={theme.colors.secondary}
-                    autoFocus
                     style={styles.input}
                   />
                   {mobile.length > 0 && (
@@ -254,39 +261,41 @@ export default function LoginScreen() {
                   disabled={sendOtp.isPending}
                   onPress={requestOtp}
                 />
-              </View>
 
-              {googleAvailable && (
-                <View style={styles.form}>
-                  <View style={styles.dividerRow}>
-                    <View style={styles.dividerLine} />
-                    <AppText style={styles.dividerText}>
-                      or continue with
-                    </AppText>
-                    <View style={styles.dividerLine} />
+                {googleAvailable && (
+                  <View style={styles.googleSection}>
+                    <View style={styles.dividerRow}>
+                      <View style={styles.dividerLine} />
+                      <AppText style={styles.dividerText}>
+                        or continue with
+                      </AppText>
+                      <View style={styles.dividerLine} />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        disabled: googleSignIn.isPending,
+                        busy: googleSignIn.isPending,
+                      }}
+                      disabled={googleSignIn.isPending}
+                      onPress={signInWithGoogle}
+                      style={({ pressed }) => [
+                        styles.googleButton,
+                        pressed && styles.pressed,
+                        googleSignIn.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Ionicons name="logo-google" size={18} color="#4285F4" />
+                      <AppText style={styles.googleText}>
+                        {googleSignIn.isPending
+                          ? 'Signing in…'
+                          : 'Continue with Google'}
+                      </AppText>
+                    </Pressable>
+                    {!!googleError && <ErrorBanner message={googleError} />}
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{
-                      disabled: googleSignIn.isPending,
-                      busy: googleSignIn.isPending,
-                    }}
-                    disabled={googleSignIn.isPending}
-                    onPress={signInWithGoogle}
-                    style={({ pressed }) => [
-                      styles.googleButton,
-                      pressed && styles.pressed,
-                      googleSignIn.isPending && styles.disabled,
-                    ]}
-                  >
-                    <Ionicons name="logo-google" size={18} color="#4285F4" />
-                    <AppText style={styles.googleText}>
-                      {googleSignIn.isPending ? 'Signing in…' : 'Google'}
-                    </AppText>
-                  </Pressable>
-                  {!!googleError && <ErrorBanner message={googleError} />}
-                </View>
-              )}
+                )}
+              </View>
 
               <AppText style={styles.consent}>
                 By continuing, you agree to Elexify’s{' '}
@@ -442,7 +451,7 @@ export default function LoginScreen() {
               color={theme.colors.secondary}
             />
             <AppText style={styles.trustLabel}>
-              Secured with one-time password · We never share your number
+              Secure OTP login · Your number stays private
             </AppText>
           </View>
         </ScrollView>
@@ -461,26 +470,27 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#F7F9F9' },
+  page: { flex: 1, backgroundColor: '#FFFFFF' },
   flex: { flex: 1 },
   body: {
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 28,
-    gap: 16,
+    paddingBottom: 16,
+    gap: 12,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
   },
   hero: {
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: theme.colors.primaryLight,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
   heroLogo: {
-    width: 150,
-    height: 43,
+    width: 140,
+    height: 40,
     resizeMode: 'contain',
     marginBottom: 4,
   },
@@ -498,23 +508,24 @@ const styles = StyleSheet.create({
   },
   benefits: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignSelf: 'stretch',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 6,
+    marginTop: 8,
   },
   benefit: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primaryLight,
   },
   benefitText: {
     fontFamily: theme.fonts.medium,
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
     color: theme.colors.text,
   },
   form: {
@@ -525,6 +536,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
+  googleSection: { gap: 12, marginTop: 4 },
   fieldLabel: {
     fontFamily: theme.fonts.medium,
     fontSize: 13,
@@ -552,8 +564,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontFamily: theme.fonts.medium,
-    fontSize: 17,
-    letterSpacing: 0.5,
+    fontSize: 15,
     color: theme.colors.text,
     paddingVertical: 12,
   },
@@ -654,10 +665,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    marginTop: 'auto',
-    paddingTop: 8,
+    paddingTop: 4,
   },
   trustLabel: {
+    flexShrink: 1,
+    lineHeight: 16,
     fontSize: 11,
     color: theme.colors.secondary,
     textAlign: 'center',
