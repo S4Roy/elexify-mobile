@@ -301,6 +301,7 @@ export type OrderDetail = OrderSummary & {
   shipping: number | null;
   discount: number | null;
   codFee: number | null;
+  roundOff: number | null;
   advanceAmount: number | null;
   codDueAmount: number | null;
   note: string;
@@ -525,6 +526,7 @@ export async function fetchOrderDetail(
     shipping: number(o.shipping),
     discount: number(o.discount),
     codFee: number(o.cod_fee),
+    roundOff: number(o.round_off),
     advanceAmount: number(o.advance_amount),
     codDueAmount: number(o.cod_due_amount),
     note: string(o.note),

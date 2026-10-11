@@ -944,6 +944,14 @@ export default function OrderDetailScreen() {
                   </AppText>
                 </View>
               )}
+              {!!data.roundOff && (
+                <View style={shop.between}>
+                  <AppText style={shop.muted}>Round off</AppText>
+                  <AppText style={styles.summaryValue}>
+                    {data.roundOff > 0 ? '+' : '−'}{money(Math.abs(data.roundOff))}
+                  </AppText>
+                </View>
+              )}
               <View style={styles.payableRow}>
                 <AppText style={styles.total}>Amount Payable</AppText>
                 <AppText style={styles.total}>{money(data.grandTotal)}</AppText>

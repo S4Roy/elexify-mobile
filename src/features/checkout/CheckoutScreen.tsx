@@ -469,7 +469,11 @@ export default function CheckoutScreen() {
   }, [data?.cod, payableBeforeCod]);
   const codFee =
     paymentMethod === 'cod' && effectiveCod?.eligible ? effectiveCod.fee : 0;
-  const total = payableBeforeCod + codFee;
+  // Payable total is in whole rupees; the difference is shown as "Round
+  // off". Mirrors the backend's services/orderService/roundOrderTotal.js.
+  const exactTotal = Math.round((payableBeforeCod + codFee) * 100) / 100;
+  const total = Math.round(exactTotal);
+  const roundOff = Number((total - exactTotal).toFixed(2));
   const isPartialCod =
     paymentMethod === 'cod' &&
     !!effectiveCod?.eligible &&
@@ -481,7 +485,7 @@ export default function CheckoutScreen() {
   useEffect(() => { setAcceptedConsentKey(null); }, [consentKey]);
   const advancePercent = isPartialCod ? effectiveCod!.advancePercent : 0;
   const advanceAmount = isPartialCod
-    ? Number((total * (advancePercent / 100)).toFixed(2))
+    ? Math.round(total * (advancePercent / 100))
     : 0;
   const codBalance = isPartialCod
     ? Number((total - advanceAmount).toFixed(2))
@@ -1070,6 +1074,14 @@ export default function CheckoutScreen() {
                     <AppText style={styles.summaryLabel}>COD fee</AppText>
                     <AppText style={styles.summaryValue}>
                       {money(codFee)}
+                    </AppText>
+                  </View>
+                )}
+                {roundOff !== 0 && !recalculating && (
+                  <View style={shop.between}>
+                    <AppText style={styles.summaryLabel}>Round off</AppText>
+                    <AppText style={styles.summaryValue}>
+                      {roundOff > 0 ? '+' : '−'}{money(Math.abs(roundOff))}
                     </AppText>
                   </View>
                 )}
