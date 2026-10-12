@@ -37,7 +37,7 @@ export async function markAllNotificationsRead() {
 export function safeNotificationRoute(route?: string) {
   return route &&
     route.length <= 240 &&
-    /^(\/notifications|\/orders(?:\/[A-Za-z0-9_-]+)?|\/products(?:\/[A-Za-z0-9_-]+)?|\/account\/security|\/\(tabs\)\/categories)$/.test(
+    /^(\/notifications|\/orders(?:\/[A-Za-z0-9_-]+)?|\/products(?:\/[A-Za-z0-9_-]+)?|\/account\/security|\/\(tabs\)\/(?:categories|cart))$/.test(
       route,
     )
     ? route
