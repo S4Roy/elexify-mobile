@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useSearchVisit } from '../search/insights';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { AppText, Feedback } from '../../components/ui';
@@ -68,6 +69,12 @@ function ProductResults({
     [search, filters, sort, collection],
   );
   const products = useProducts(params);
+  const recordSearchResults = useSearchVisit(search, first(route.search_event_id), params);
+  useEffect(() => {
+    if (products.isSuccess && !products.isPlaceholderData && !products.isFetching && !products.isError) {
+      recordSearchResults(products.data.pages[0]?.total, { ...params, page: 1 });
+    }
+  }, [products.data, products.isSuccess, products.isPlaceholderData, products.isFetching, products.isError, params, recordSearchResults]);
   const items = uniqueProducts(
     products.data?.pages.flatMap(p => p.items) ?? [],
   );

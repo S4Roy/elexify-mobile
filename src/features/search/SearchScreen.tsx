@@ -1,3 +1,4 @@
+import { submitSearch, selectSearchSuggestion } from './insights';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -140,11 +141,13 @@ export default function SearchScreen() {
       return;
     }
     history.add(term);
-    router.push({ pathname: '/products', params: { search_key: term } });
+    const eventId = submitSearch(term);
+    router.push({ pathname: '/products', params: { search_key: term, ...(eventId ? { search_event_id: eventId } : {}) } });
   };
 
   const goToProduct = (product: Product) => {
     history.add(query);
+    selectSearchSuggestion(query, product.id);
     router.push({
       pathname: '/products/[slug]',
       params: {
