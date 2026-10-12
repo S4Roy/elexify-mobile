@@ -10,6 +10,7 @@ import { AppProviders } from '../src/providers/AppProviders';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 import { PermissionOnboarding } from '../src/features/onboarding/PermissionOnboarding';
 import { WelcomeLogin } from '../src/features/auth/WelcomeLogin';
+import { LocationSync } from '../src/features/onboarding/LocationSync';
 import { useWelcome } from '../src/features/auth/welcome';
 import { NavigationBarInset } from '../src/components/NavigationBarInset';
 import { useSession } from '../src/stores/session';
@@ -52,6 +53,7 @@ export default function RootLayout() {
             </NavigationBarInset>
             <PushProvider />
             <WelcomeLogin />
+            <LocationSync />
             {/* After the splash and the first-launch login, so neither hides the other. */}
             <PermissionOnboarding enabled={!showSplash && welcomePhase === 'done'} />
           </UpdateGate>

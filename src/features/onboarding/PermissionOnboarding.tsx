@@ -6,6 +6,7 @@ import { AppText } from '../../components/ui';
 import { theme } from '../../theme';
 import { useSession } from '../../stores/session';
 import { syncPushRegistration } from '../notifications/PushProvider';
+import { syncCustomerLocation } from './LocationSync';
 import {
   PermissionState,
   choosePromotionalPush,
@@ -37,7 +38,7 @@ const ITEMS: { key: Key; icon: keyof typeof Ionicons.glyphMap; title: string; bo
     key: 'location',
     icon: 'location',
     title: 'Delivery to your area',
-    body: 'Find your pincode to check delivery and fill in your address faster. Used only while you use the app.',
+    body: 'Find your pincode, check delivery and fill in your address faster. Saved to your account; used only while the app is open.',
   },
 ];
 
@@ -109,6 +110,8 @@ export function PermissionOnboarding({ enabled }: { enabled: boolean }) {
         const result = await requestLocation();
         setStates(s => ({ ...s, location: result }));
         if (result === 'granted') {
+          // Signed in: also record the area on the account right away.
+          syncCustomerLocation({ force: true }).catch(() => undefined);
           const found = await useDetectedLocation.getState().detect();
           setLocationNote(found
             ? `Delivering to ${[found.city, found.pincode].filter(Boolean).join(' ')}${found.serviceable ? '' : ' — not serviceable yet'}`

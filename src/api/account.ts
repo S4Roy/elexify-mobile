@@ -184,3 +184,23 @@ export async function confirmAccountDeletion(params: { otp: string; reason: stri
 export async function setPromotionalPush(enabled: boolean, source: 'onboarding' | 'settings' = 'settings') {
   await api.patch('user/account/notification-preferences', { marketing: { push: enabled }, source });
 }
+
+export type LocationReading = {
+  latitude: number;
+  longitude: number;
+  /** GPS accuracy radius in metres. */
+  accuracy: number | null;
+  /** False when the customer chose "Approximate" in the system dialog. */
+  precise: boolean | null;
+};
+
+/** Saves the customer's current location on their account. */
+export async function reportLocation(reading: LocationReading) {
+  const res = await api.post('user/account/location', reading);
+  const d = record(res.data?.data);
+  return {
+    pincode: typeof d.pincode === 'string' ? d.pincode : '',
+    city: typeof d.city === 'string' ? d.city : '',
+    serviceable: d.serviceable === true,
+  };
+}

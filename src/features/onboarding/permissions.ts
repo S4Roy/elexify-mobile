@@ -87,6 +87,7 @@ type DetectedStore = {
   loaded: boolean;
   load: () => Promise<void>;
   detect: () => Promise<DetectedLocation | null>;
+  remember: (area: Omit<DetectedLocation, 'detectedAt'>) => void;
 };
 
 export const useDetectedLocation = create<DetectedStore>((set, get) => ({
@@ -100,6 +101,11 @@ export const useDetectedLocation = create<DetectedStore>((set, get) => ({
     } catch {
       set({ loaded: true });
     }
+  },
+  remember: area => {
+    const location = { ...area, detectedAt: Date.now() };
+    set({ location });
+    AsyncStorage.setItem(DETECTED_KEY, JSON.stringify(location)).catch(() => undefined);
   },
   detect: async () => {
     try {
