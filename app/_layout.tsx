@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProviders } from '../src/providers/AppProviders';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
+import { PermissionOnboarding } from '../src/features/onboarding/PermissionOnboarding';
 import { NavigationBarInset } from '../src/components/NavigationBarInset';
 import { useSession } from '../src/stores/session';
 export { ErrorBoundary } from 'expo-router';
@@ -47,6 +48,8 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false }} />
             </NavigationBarInset>
             <PushProvider />
+            {/* After the splash, so the primer is the first thing seen, not hidden under it. */}
+            <PermissionOnboarding enabled={!showSplash} />
           </UpdateGate>
         </AppProviders>
       )}

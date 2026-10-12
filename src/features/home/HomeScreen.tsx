@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, View, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import { apiConfig } from '../../api/config';
 import { useIdentity } from '../catalog/hooks';
 import { QueryState } from '../catalog/QueryState';
 import { useAddresses } from '../address/hooks';
+import { useDetectedLocation } from '../onboarding/permissions';
 import { theme } from '../../theme';
 import HomeSectionView, { HomeSkeleton } from './HomeSectionView';
 
@@ -77,6 +78,12 @@ export default function HomeScreen() {
   const defaultAddress = addresses.data?.items.find(
     address => address.isDefault,
   );
+  // Before an address is saved, show the area found during onboarding.
+  const detected = useDetectedLocation(state => state.location);
+  const loadDetected = useDetectedLocation(state => state.load);
+  useEffect(() => {
+    loadDetected().catch(() => undefined);
+  }, [loadDetected]);
   const deliveryLabel = defaultAddress
     ? [
         defaultAddress.addressLine1,
@@ -85,6 +92,8 @@ export default function HomeScreen() {
       ]
         .filter(Boolean)
         .join(', ')
+    : detected
+    ? `Deliver to ${[detected.city, detected.pincode].filter(Boolean).join(' ')}`
     : 'Choose delivery address';
   const sections = [...(home.data ?? [])];
   const heroIndex = sections.findIndex(section => section.type === 'hero');

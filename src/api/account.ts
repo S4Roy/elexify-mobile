@@ -179,3 +179,8 @@ export async function requestAccountDeletion(): Promise<{ otpChannel: 'sms' | 'e
 export async function confirmAccountDeletion(params: { otp: string; reason: string | null }): Promise<void> {
   await api.post('user/account/delete/confirm', { otp: params.otp, reason: params.reason });
 }
+
+/** Promotional push consent only (offers, price drops, back in stock). */
+export async function setPromotionalPush(enabled: boolean, source: 'onboarding' | 'settings' = 'settings') {
+  await api.patch('user/account/notification-preferences', { marketing: { push: enabled }, source });
+}

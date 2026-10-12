@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { flushPromotionalPushChoice } from '../onboarding/permissions';
 import { apiConfig } from '../../api/config';
 import { useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -150,6 +151,8 @@ export function PushProvider() {
   useEffect(() => {
     if (status === 'authenticated') {
       syncPushRegistration().catch(() => undefined);
+      // An offers opt-in chosen as a guest during onboarding.
+      flushPromotionalPushChoice().catch(() => undefined);
       if (pending.current) {
         const id = pending.current;
         pending.current = null;
