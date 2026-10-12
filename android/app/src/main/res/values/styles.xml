@@ -1,14 +1,20 @@
 <resources>
 
+    <!-- Launch theme: the Android 12+ SplashScreen API (back-ported to older
+         versions by androidx core-splashscreen, via expo-splash-screen). One
+         consistent brand splash on every Android version; MainActivity keeps
+         it up until JS calls SplashScreen.hideAsync(), then switches to
+         AppTheme. -->
+    <style name="Theme.App.SplashScreen" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splashscreen_logo</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
+
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
-        <!-- Shown as the native window's background the instant the app
-             process starts, before JS has loaded — acts as the splash
-             screen. React Native's own views paint over it once the first
-             screen renders, so it's otherwise invisible during normal use. -->
-        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowBackground">@color/appBackground</item>
     </style>
 
 </resources>

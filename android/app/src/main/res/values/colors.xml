@@ -1,5 +1,7 @@
 <resources>
     <color name="splashBackground">#00796A</color>
+    <!-- Behind React views (keyboard resize, transitions) once the splash is gone. -->
+    <color name="appBackground">#FFFFFF</color>
     <!-- Accent for notification icons/actions (brand teal). -->
     <color name="notification_color">#00796A</color>
 </resources>

@@ -7,6 +7,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import expo.modules.splashscreen.SplashScreenManager
 
 class MainActivity : ReactActivity() {
 
@@ -29,6 +30,9 @@ class MainActivity : ReactActivity() {
     if (resources.configuration.smallestScreenWidthDp < 600) {
       requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     }
+    // Installs the Android 12+ splash (before super.onCreate, as required) and
+    // keeps it until JS hides it — see app/_layout.tsx and AnimatedSplash.
+    SplashScreenManager.registerOnActivity(this)
     super.onCreate(null)
   }
 }
