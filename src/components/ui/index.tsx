@@ -14,8 +14,12 @@ import { theme } from '../../theme';
 import { useSmsUserConsent } from '../../platform/smsUserConsent';
 import { normalizeOtpInput } from '../../utils/otp';
 
-export function AppText({ style, ...props }: TextProps) {
-  return <Text {...props} style={[styles.text, style]} />;
+// Honour the phone's font-size setting, but only up to 1.3x: beyond that
+// fixed-height bars (checkout/cart totals, buttons) wrap or clip.
+export const MAX_FONT_SCALE = 1.3;
+
+export function AppText({ style, maxFontSizeMultiplier = MAX_FONT_SCALE, ...props }: TextProps) {
+  return <Text {...props} maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.text, style]} />;
 }
 export function Button({
   label,

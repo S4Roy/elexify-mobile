@@ -1193,7 +1193,7 @@ export default function CheckoutScreen() {
             )}
             <View style={styles.bottomRow}>
               <View style={styles.bottomTotal}>
-                <AppText style={styles.bottomAmount}>
+                <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.bottomAmount}>
                   {recalculating ? '…' : money(payNow)}
                 </AppText>
                 <Pressable
@@ -1253,6 +1253,8 @@ export default function CheckoutScreen() {
                 ) : null}
                 <AppText
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
                   style={[
                     styles.ctaText,
                     ctaKind === 'setup' && styles.ctaTextSetup,
@@ -1758,9 +1760,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   bottomCaption: { fontSize: 11, color: theme.colors.primary },
+  // Sizes to its label but never pushes the amount off-screen.
   cta: {
-    minWidth: 148,
-    paddingHorizontal: 22,
+    flexShrink: 1,
+    maxWidth: '64%',
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1782,7 +1786,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   ctaDisabled: { opacity: 0.5 },
-  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15 },
+  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15, flexShrink: 1 },
   ctaTextSetup: { color: theme.colors.primary },
 
   confirmOverlay: {

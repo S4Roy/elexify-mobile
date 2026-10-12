@@ -608,12 +608,12 @@ export default function CartScreen() {
                   {money(data.mrpSubtotal)}
                 </AppText>
               )}
-              <AppText style={styles.bottomAmount}>
+              <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.bottomAmount}>
                 {money(data.subtotal)}
               </AppText>
             </View>
             <View style={styles.bottomLink}>
-              <AppText style={styles.bottomLinkText}>
+              <AppText numberOfLines={1} style={styles.bottomLinkText}>
                 View price details
               </AppText>
               <Ionicons
@@ -642,7 +642,7 @@ export default function CartScreen() {
             {mutation.isPending || cart.isFetching ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : null}
-            <AppText style={styles.ctaText}>
+            <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.ctaText}>
               {blocked
                 ? 'Fix stock issues'
                 : isAuthenticated
@@ -1030,7 +1030,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     elevation: 12,
   },
-  bottomTotal: { minWidth: 96 },
+  // Price block keeps its natural width but may shrink; the button takes the rest.
+  bottomTotal: { minWidth: 96, flexShrink: 1 },
   bottomAmount: {
     fontFamily: theme.fonts.bold,
     fontSize: 19,
@@ -1038,6 +1039,8 @@ const styles = StyleSheet.create({
   },
   cta: {
     flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1052,5 +1055,5 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   ctaDisabled: { backgroundColor: '#9CA3AF', shadowOpacity: 0, elevation: 0 },
-  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15 },
+  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15, flexShrink: 1 },
 });
