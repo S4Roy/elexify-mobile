@@ -7,6 +7,8 @@ import React, {
 import {
   AccessibilityInfo,
   Animated,
+  Platform,
+  Vibration,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -25,10 +27,15 @@ export type BannerMessage = {
   id: string;
   title: string;
   body: string;
+  /** Backend type; offers arrive quietly, everything else buzzes once. */
+  type?: string;
   onPress: () => void;
 };
 
 const VISIBLE_MS = 5000;
+// Same split as the Android channels (NotificationChannels.kt): offers are
+// default-importance and never vibrate.
+const QUIET_TYPES = /^(PROMOTIONAL_CAMPAIGN|BACK_IN_STOCK|PRICE_DROP|NEW_PRODUCT|CART_ABANDONED)$/;
 let current: BannerMessage | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(l => l());
@@ -71,6 +78,12 @@ export function InAppBanner() {
       damping: 18,
       stiffness: 180,
     }).start();
+    // The OS stays silent for pushes while the app is open; a short buzz
+    // (like WhatsApp/Swiggy) says something arrived. Android only — iOS can
+    // only do a long 400 ms vibration from JS.
+    if (Platform.OS === 'android' && !QUIET_TYPES.test(message.type ?? '')) {
+      Vibration.vibrate(40);
+    }
     AccessibilityInfo.announceForAccessibility(
       `${message.title}. ${message.body}`,
     );

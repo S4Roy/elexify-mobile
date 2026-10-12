@@ -179,6 +179,7 @@ export function PushProvider() {
                 id: notification._id,
                 title: notification.title,
                 body: notification.body,
+                type: notification.type,
                 onPress: () => {
                   openRef.current(notification._id).catch(() => undefined);
                 },
