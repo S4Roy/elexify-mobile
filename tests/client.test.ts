@@ -119,3 +119,23 @@ test('network failure during refresh preserves the session', async () => {
   await expect(api.get('products', { adapter: expiredAdapter })).rejects.toThrow('offline');
   expect(signOut).not.toHaveBeenCalled();
 });
+test('requests bypass the HTTP cache', async () => {
+  await api.get('site/cms/home', {
+    adapter: async config => {
+      expect(config.headers.get('Cache-Control')).toBe('no-cache, no-store');
+      return { data: {}, status: 200, statusText: 'OK', headers: new AxiosHeaders(), config };
+    },
+  });
+});
+test('a replayed session-expired header after a successful refresh does not sign out', async () => {
+  // OkHttp once replayed a cached X-Session-Expired: 1 on every 304, so the
+  // retry after a good refresh still said "expired" and signed the customer out.
+  const signOut = jest.fn().mockResolvedValue(undefined);
+  const refreshToken = jest.fn(async () => { useSession.setState({ token: 'refreshed-token' }); return 'refreshed-token'; });
+  useSession.setState({ signOut, refreshToken });
+  const response = await api.get('site/cms/home', { adapter: expiredAdapter });
+  expect(refreshToken).toHaveBeenCalledTimes(1);
+  expect(response.status).toBe(200);
+  expect(signOut).not.toHaveBeenCalled();
+  expect(useSession.getState().token).toBe('refreshed-token');
+});

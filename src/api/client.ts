@@ -47,6 +47,10 @@ api.interceptors.request.use(async config => {
   }
   config.headers.set('x-api-key', apiConfig.publicKey);
   config.headers.set('x-session-request', '1');
+  // Keep API responses out of OkHttp's HTTP cache (React Query caches data).
+  // On a 304 it replays the stored response's headers, which once replayed a
+  // stale X-Session-Expired and signed customers out right after login.
+  config.headers.set('Cache-Control', 'no-cache, no-store');
   if (Platform.OS !== 'web') {
     config.headers.set('x-auth-client', 'native');
     for (const [name, value] of Object.entries(nativeClientHeaders())) config.headers.set(name, value);
@@ -64,8 +68,11 @@ api.interceptors.request.use(async config => {
 // Sign out when the token a request carried stops working: a 401 from a
 // sign-in-only route, or X-Session-Expired from a route that served the
 // request as a guest instead. Ignore an old request's response after the
-// user has switched sessions.
-async function expireSession(sentAuthorization: unknown) {
+// user has switched sessions, and a retry that follows a successful refresh:
+// the server has just accepted the session, so only a failed refresh (401/
+// 403, handled in retrySession) ends it.
+async function expireSession(sentAuthorization: unknown, config?: any) {
+  if (config?._sessionRetry) return;
   const token = useSession.getState().token;
   if (useSession.getState().endingSession) return;
   if (token && sentAuthorization === `Bearer ${token}`) {
@@ -103,7 +110,7 @@ api.interceptors.response.use(
     if (response.headers['x-session-expired'] === '1') {
       const retried = await retrySession(response.config);
       if (retried) return retried;
-      await expireSession(response.config.headers.get('Authorization'));
+      await expireSession(response.config.headers.get('Authorization'), response.config);
     }
     return response;
   },
@@ -125,7 +132,7 @@ api.interceptors.response.use(
       status === 401 ||
       error.response?.headers['x-session-expired'] === '1'
     ) {
-      await expireSession(error.config?.headers.get('Authorization'));
+      await expireSession(error.config?.headers.get('Authorization'), error.config);
     }
     const data = error.response?.data;
     const message = data?.validation?.body?.message ?? data?.message;
