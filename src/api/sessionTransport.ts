@@ -3,8 +3,9 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiConfig } from './config';
 import { sessionStorage } from '../platform/session';
+import { nativeClientHeaders } from './clientInfo';
 const transport = axios.create({ baseURL: apiConfig.baseUrl ?? undefined, timeout: 15000, withCredentials: true,
-  headers: { 'x-api-key': apiConfig.publicKey, 'x-session-request': '1', ...(Platform.OS !== 'web' ? { 'x-auth-client': 'native' } : {}) } });
+  headers: { 'x-api-key': apiConfig.publicKey, 'x-session-request': '1', ...(Platform.OS !== 'web' ? { 'x-auth-client': 'native', ...nativeClientHeaders() } : {}) } });
 let pending: Promise<string> | null = null;
 export async function saveRefresh(token: any, fromLogin = false) {
   if (fromLogin && pending) await pending.catch(() => undefined);

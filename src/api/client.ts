@@ -1,6 +1,7 @@
 import { sessionStorage } from '../platform/session';
 import { Platform } from 'react-native';
 import { saveRefresh } from './sessionTransport';
+import { nativeClientHeaders } from './clientInfo';
 import axios from 'axios';
 import { apiConfig } from './config';
 import { useSession } from '../stores/session';
@@ -46,7 +47,10 @@ api.interceptors.request.use(async config => {
   }
   config.headers.set('x-api-key', apiConfig.publicKey);
   config.headers.set('x-session-request', '1');
-  if (Platform.OS !== 'web') config.headers.set('x-auth-client', 'native');
+  if (Platform.OS !== 'web') {
+    config.headers.set('x-auth-client', 'native');
+    for (const [name, value] of Object.entries(nativeClientHeaders())) config.headers.set(name, value);
+  }
   config.headers.set('x-device-id', await sessionStorage.deviceId());
   config.headers.delete('Authorization');
   config.headers.delete('x-guest-id');
