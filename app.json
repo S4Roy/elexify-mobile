@@ -3,7 +3,7 @@
     "name": "Elexify",
     "slug": "elexify-mobile",
     "scheme": "elexify",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "android": {
       "package": "com.elexify"
     }
