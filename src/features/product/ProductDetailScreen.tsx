@@ -36,6 +36,7 @@ import { QueryState } from '../catalog/QueryState';
 import { uniqueProducts } from '../catalog/filters';
 import { plainText } from '../../utils/html';
 import { theme } from '../../theme';
+import { NotifyMeButton } from './NotifyMeButton';
 import { useSession } from '../../stores/session';
 import { useCompareStore } from '../../stores/compare';
 import { useRecentlyViewed } from '../../stores/recentlyViewed';
@@ -1434,7 +1435,7 @@ export default function ProductDetailScreen() {
             </View>
           ) : !inStock ? (
             <View style={styles.flex}>
-              <Button label="Out of stock" disabled onPress={() => undefined} />
+              <NotifyMeButton productId={data.id} variationId={resolved?.id} />
             </View>
           ) : (
             <>
