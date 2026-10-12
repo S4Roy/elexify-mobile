@@ -24,6 +24,7 @@ import {
 } from '../../components/shop';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
+import { ApiError } from '../../api/client';
 import type { Address } from '../../api/address';
 import type { CartItem } from '../../api/cart';
 import { useAccount } from '../auth/hooks';
@@ -36,7 +37,7 @@ import {
   useClearCartOnOrderSuccess,
   useVerifyPayment,
 } from './hooks';
-import { isRazorpayCancelled } from './friendlyReason';
+import { checkoutErrorMessage, isRazorpayCancelled } from './friendlyReason';
 import { useCheckoutAddress } from '../../stores/checkoutAddress';
 
 const formatAddress = (address: Address) =>
@@ -640,8 +641,13 @@ export default function CheckoutScreen() {
         });
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Unable to place your order.';
+      const message = err instanceof Error ? err.message : '';
+      console.warn('[checkout] place order failed', {
+        status: err instanceof ApiError ? err.status : undefined,
+        message: message || String(err),
+        paymentMethod,
+        isDirectCheckout,
+      });
       // The optimistic client-side check can be stale — the backend is
       // authoritative here. Surface the gate instead of a raw error string.
       if (/MOBILE_VERIFICATION_REQUIRED/.test(message)) {
@@ -661,7 +667,7 @@ export default function CheckoutScreen() {
         setAcceptedConsentKey(null);
         await cart.refetch();
       }
-      setError(message);
+      setError(checkoutErrorMessage(err));
     } finally {
       setPlacing(false);
     }
