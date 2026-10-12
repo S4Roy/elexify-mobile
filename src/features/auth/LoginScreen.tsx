@@ -10,7 +10,8 @@ import {
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, type Href } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useWelcome } from './welcome';
 import { AppText, Button, OtpInput } from '../../components/ui';
 import { ShopHeader, shop } from '../../components/shop';
 import { theme } from '../../theme';
@@ -51,6 +52,13 @@ function finishSignIn() {
 }
 
 export default function LoginScreen() {
+  // First-launch, skippable variant (see welcome.ts): "Skip" instead of back.
+  const welcome = useLocalSearchParams<{ welcome?: string }>().welcome === '1';
+  useEffect(() => {
+    if (!welcome) return;
+    // Skipped, backed out or signed in — the app carries on either way.
+    return () => useWelcome.getState().finish();
+  }, [welcome]);
   const [step, setStep] = useState<'identity' | 'verify'>('identity');
   const [mobile, setMobile] = useState('');
   const [isExisting, setIsExisting] = useState(true);
@@ -138,9 +146,22 @@ export default function LoginScreen() {
   return (
     <View style={styles.page}>
       <ShopHeader
-        title={step === 'identity' ? 'Login' : 'Verify'}
-        back
+        title={step === 'identity' ? (welcome ? 'Welcome' : 'Login') : 'Verify'}
+        back={!welcome}
         actions={false}
+        trailing={
+          welcome ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Skip sign in and browse"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              hitSlop={10}
+              style={({ pressed }) => [styles.skip, pressed && { opacity: 0.6 }]}
+            >
+              <AppText style={styles.skipText}>Skip</AppText>
+            </Pressable>
+          ) : undefined
+        }
       />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -168,8 +189,9 @@ export default function LoginScreen() {
                   Login or sign up
                 </AppText>
                 <AppText style={styles.subtitle}>
-                  Use your mobile number to continue. New here? We’ll create
-                  your account.
+                  {welcome
+                    ? 'Sign in to track orders and check out faster. Or tap Skip to start browsing.'
+                    : 'Use your mobile number to continue. New here? We\u2019ll create your account.'}
                 </AppText>
                 <View style={styles.benefits}>
                   {BENEFITS.map(b => (
@@ -471,6 +493,8 @@ function ErrorBanner({ message }: { message: string }) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
+  skip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: theme.colors.primaryLight },
+  skipText: { fontFamily: theme.fonts.semibold, fontSize: 14, color: theme.colors.primary },
   flex: { flex: 1 },
   body: {
     flexGrow: 1,

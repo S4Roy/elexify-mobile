@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProviders } from '../src/providers/AppProviders';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 import { PermissionOnboarding } from '../src/features/onboarding/PermissionOnboarding';
+import { WelcomeLogin } from '../src/features/auth/WelcomeLogin';
+import { useWelcome } from '../src/features/auth/welcome';
 import { NavigationBarInset } from '../src/components/NavigationBarInset';
 import { useSession } from '../src/stores/session';
 export { ErrorBoundary } from 'expo-router';
@@ -32,6 +34,7 @@ export default function RootLayout() {
   // here too means the branded splash covers that gap instead of handing
   // off to AppProviders' plain "Elexify" / Loading… fallback screen.
   const sessionStatus = useSession(state => state.status);
+  const welcomePhase = useWelcome(state => state.phase);
   if (error) {
     // The native splash now waits for JS; never leave it covering the error screen.
     SplashScreen.hideAsync().catch(() => undefined);
@@ -48,8 +51,9 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false }} />
             </NavigationBarInset>
             <PushProvider />
-            {/* After the splash, so the primer is the first thing seen, not hidden under it. */}
-            <PermissionOnboarding enabled={!showSplash} />
+            <WelcomeLogin />
+            {/* After the splash and the first-launch login, so neither hides the other. */}
+            <PermissionOnboarding enabled={!showSplash && welcomePhase === 'done'} />
           </UpdateGate>
         </AppProviders>
       )}

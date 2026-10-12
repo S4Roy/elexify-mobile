@@ -708,6 +708,7 @@ export function ShopHeader({
   scrollY,
   notifications = search,
   actions = true,
+  trailing,
 }: {
   title?: string;
   /** Home variant: large logo; pair with <HomeSearchPanel> as the first item
@@ -726,6 +727,8 @@ export function ShopHeader({
   notifications?: boolean;
   /** false hides search, bell and cart — focused flows such as sign-in. */
   actions?: boolean;
+  /** Extra control at the right edge, e.g. "Skip" on the first-launch login. */
+  trailing?: React.ReactNode;
 }) {
   const { width } = useWindowDimensions();
   const unread = useUnreadNotificationCount();
@@ -839,6 +842,7 @@ export function ShopHeader({
               onPress={() => router.push('/cart')}
             />
           )}
+          {trailing}
         </View>
         {!search && !!deliveryLabel && (
           <DeliveryRow label={deliveryLabel} scale={scale} />
