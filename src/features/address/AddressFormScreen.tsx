@@ -1,3 +1,4 @@
+import { isEnglishCustomerName, CUSTOMER_NAME_MESSAGE } from '../../utils/customer-name';
 import { AddressAccessGate } from './AddressAccessGate';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -494,12 +495,12 @@ function AddressFormScreenContent() {
               <View style={styles.flex}>
                 <Field control={control} name="firstName" label="First name" placeholder="First name" required maxLength={100}
                   autoCapitalize="words" textContentType="givenName" autoComplete="name-given"
-                  rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
+                  rules={{ validate: value => value.trim().length < 2 ? 'Enter at least 2 characters.' : isEnglishCustomerName(value) || CUSTOMER_NAME_MESSAGE }} />
               </View>
               <View style={styles.flex}>
                 <Field control={control} name="lastName" label="Last name" placeholder="Last name" required maxLength={100}
                   autoCapitalize="words" textContentType="familyName" autoComplete="name-family"
-                  rules={{ validate: value => value.trim().length >= 2 || 'Enter at least 2 characters.' }} />
+                  rules={{ validate: value => value.trim().length < 2 ? 'Enter at least 2 characters.' : isEnglishCustomerName(value) || CUSTOMER_NAME_MESSAGE }} />
               </View>
             </View>
             <View style={styles.accountBox}>

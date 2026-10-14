@@ -1,3 +1,4 @@
+import { isEnglishCustomerName, CUSTOMER_NAME_MESSAGE } from '../utils/customer-name';
 import { api } from './client';
 import { Page, record, string } from './discovery';
 
@@ -115,6 +116,7 @@ export type AddressInput = {
 };
 
 function addressPayload(input: AddressInput) {
+  if (!isEnglishCustomerName(input.firstName) || !isEnglishCustomerName(input.lastName)) throw new Error(CUSTOMER_NAME_MESSAGE);
   return {
     first_name: input.firstName,
     last_name: input.lastName,

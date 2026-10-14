@@ -1,3 +1,4 @@
+import { CustomerNameGate } from '../src/features/account/CustomerNameGate';
 import { UpdateGate } from '../src/features/app-update/UpdateGate';
 import { PushProvider } from '../src/features/notifications/PushProvider';
 import React, { useCallback, useState } from 'react';
@@ -51,6 +52,7 @@ export default function RootLayout() {
             <NavigationBarInset>
               <Stack screenOptions={{ headerShown: false }} />
             </NavigationBarInset>
+            <CustomerNameGate />
             <PushProvider />
             <WelcomeLogin />
             <LocationSync />

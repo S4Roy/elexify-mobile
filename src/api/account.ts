@@ -1,4 +1,5 @@
-import { api } from './client';
+import { isEnglishCustomerName, CUSTOMER_NAME_MESSAGE } from '../utils/customer-name';
+import { api, ApiError } from './client';
 import { record } from './discovery';
 
 export async function requestEmailChange(email: string): Promise<void> {
@@ -27,6 +28,8 @@ export async function updateProfile(params: {
   gender?: string | null;
   profileImage?: string;
 }): Promise<void> {
+  if ((params.firstName !== undefined && !isEnglishCustomerName(params.firstName)) ||
+      (params.lastName?.trim() && !isEnglishCustomerName(params.lastName))) throw new ApiError(CUSTOMER_NAME_MESSAGE);
   await api.put('user/account/edit', {
     ...(params.firstName !== undefined ? { first_name: params.firstName } : {}),
     ...(params.lastName !== undefined ? { last_name: params.lastName } : {}),

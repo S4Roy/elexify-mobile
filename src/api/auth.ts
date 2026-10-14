@@ -1,3 +1,4 @@
+import { isEnglishCustomerName, CUSTOMER_NAME_MESSAGE } from '../utils/customer-name';
 import { api, ApiError } from './client';
 import { record, string } from './discovery';
 
@@ -24,6 +25,8 @@ export async function verifyOtp(params: {
   firstName?: string;
   lastName?: string;
 }): Promise<VerifyOtpResult> {
+  if ((params.firstName !== undefined && !isEnglishCustomerName(params.firstName)) ||
+      (params.lastName?.trim() && !isEnglishCustomerName(params.lastName))) throw new ApiError(CUSTOMER_NAME_MESSAGE);
   const res = await api.post('auth/user/verify-otp', {
     mobile: params.mobile,
     phone_code: '91',

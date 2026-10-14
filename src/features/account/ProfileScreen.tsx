@@ -1,3 +1,4 @@
+import { isEnglishCustomerName, CUSTOMER_NAME_MESSAGE } from '../../utils/customer-name';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -309,9 +310,12 @@ export default function ProfileScreen() {
       ? 'Enter your first name'
       : firstName.trim().length < 2
       ? 'Use at least 2 characters'
+      : !isEnglishCustomerName(firstName)
+      ? CUSTOMER_NAME_MESSAGE
       : undefined;
+  const lastNameError = lastName.trim() && !isEnglishCustomerName(lastName) ? CUSTOMER_NAME_MESSAGE : undefined;
   const showFirstNameError = (touched || dirty) && !!firstNameError;
-  const canSave = dirty && !firstNameError && !updateProfile.isPending;
+  const canSave = dirty && !firstNameError && !lastNameError && !updateProfile.isPending;
 
   const completion = useMemo(() => {
     if (!data) {
@@ -543,6 +547,10 @@ export default function ProfileScreen() {
                 subtitle="How we address you on orders and messages"
                 icon="person-outline"
               >
+                {data && !isEnglishCustomerName([data.firstName, data.lastName].filter(Boolean).join(' ')) && (
+                  <AppText accessibilityRole="alert" style={styles.errorText}>Please update your name in English to continue using your account.</AppText>
+                )}
+                <AppText accessibilityRole="text" style={styles.noteText}>Please enter your name in English letters (A-Z). Spaces, apostrophes, hyphens and periods are allowed.</AppText>
                 <View style={styles.nameRow}>
                   <NameField
                     label="First name"
@@ -557,6 +565,7 @@ export default function ProfileScreen() {
                   />
                   <NameField
                     label="Last name"
+                    error={(touched || dirty) ? lastNameError : undefined}
                     value={lastName}
                     onChange={setLastName}
                     autoComplete="name-family"

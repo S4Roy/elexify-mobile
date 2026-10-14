@@ -1,3 +1,4 @@
+import { CUSTOMER_NAME_PATTERN, CUSTOMER_NAME_MESSAGE } from '../../utils/customer-name';
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -15,8 +16,8 @@ import { theme } from '../../theme';
 import { useSiteSettings, useSubmitContactUs } from './hooks';
 
 // Matches the backend's celebrate validation (validations/site/contact_us/submit.js):
-// name letters/spaces only, phone 10-15 digits, subject required, email/message optional.
-const namePattern = /^[a-zA-Z ]+$/;
+// English name with common name punctuation; phone 10-15 digits.
+const namePattern = CUSTOMER_NAME_PATTERN;
 const phonePattern = /^[0-9]{10,15}$/;
 
 function InfoCard({
@@ -176,7 +177,7 @@ export default function ContactUsScreen() {
               autoCapitalize="words"
             />
             {touched && !nameValid && (
-              <AppText style={styles.fieldError}>Enter a valid name.</AppText>
+              <AppText style={styles.fieldError}>{CUSTOMER_NAME_MESSAGE}</AppText>
             )}
 
             <AppText style={styles.label}>Phone number *</AppText>
