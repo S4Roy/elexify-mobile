@@ -290,8 +290,9 @@ export default function SearchScreen() {
                     <Pressable
                       key={c.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`Search ${c.name}`}
-                      onPress={() => search(c.name)}
+                      accessibilityLabel={`Browse ${c.name}`}
+                      // Category names rarely appear in product names; open the category instead of a text search.
+                      onPress={() => router.push({ pathname: '/products', params: { category: c.slug, title: c.name } })}
                       style={styles.suggestChip}
                     >
                       <Ionicons name="trending-up" size={15} color={theme.colors.primary} />

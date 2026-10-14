@@ -24,6 +24,7 @@ import {
 import { useCategories, useProducts } from './hooks';
 import { QueryState } from './QueryState';
 import FilterSheet from './FilterSheet';
+import { NoResults } from './NoResults';
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value ?? '';
 export default function ProductListScreen() {
@@ -196,7 +197,7 @@ function ProductResults({
               }}
               skeleton={<ProductGridSkeleton withCount />}
             />
-            {products.data && (
+            {products.data && products.data.pages[0].total > 0 && (
               <AppText style={shop.muted}>
                 {products.data.pages[0].total} products
               </AppText>
@@ -210,9 +211,10 @@ function ProductResults({
         )}
         ListEmptyComponent={
           !products.isPending && !products.isError ? (
-            <Feedback
-              title="No matching products"
-              message="Try a different search or clear your filters."
+            <NoResults
+              search={search}
+              filtersActive={count > 0}
+              onClearFilters={() => setFilters(emptyFilters())}
             />
           ) : null
         }
