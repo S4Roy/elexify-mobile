@@ -5,6 +5,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -27,6 +28,7 @@ import { CartItem } from '../../api/cart';
 import {
   useCart,
   useCartMutation,
+  useCartDeliveryEstimate,
   useReturnPolicy,
   useSaveForLater,
 } from './hooks';
@@ -296,6 +298,33 @@ export default function CartScreen() {
   const isAuthenticated = useSession(s => s.status === 'authenticated');
   const insets = useSafeAreaInsets();
   const data = cart.data;
+  const addresses = useAddresses();
+  const defaultAddress =
+    addresses.data?.items.find(address => address.isDefault) ??
+    addresses.data?.items[0];
+  const [postcodeOverride, setPostcodeOverride] = useState<string | null>(null);
+  const postcode =
+    postcodeOverride ??
+    (defaultAddress?.country.id === 101 ? defaultAddress.postcode : '');
+  const [postcodeDraft, setPostcodeDraft] = useState('');
+  const [postcodeError, setPostcodeError] = useState('');
+  const delivery = useCartDeliveryEstimate(postcode, data, cart.isFetching);
+  const shippingAmount = delivery.estimate?.shippingAmount ?? null;
+  const estimatedTotal = (data?.subtotal ?? 0) + (shippingAmount ?? 0);
+  useEffect(() => setPostcodeDraft(postcode), [postcode]);
+  const checkPostcode = () => {
+    if (!/^[0-9]{6}$/.test(postcodeDraft.trim())) {
+      setPostcodeError('Enter a valid 6-digit pincode.');
+      return;
+    }
+    setPostcodeError('');
+    if (postcodeDraft.trim() === postcode) {
+      delivery.location.refetch().catch(() => undefined);
+      delivery.quote.refetch().catch(() => undefined);
+    } else {
+      setPostcodeOverride(postcodeDraft.trim());
+    }
+  };
   const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [summaryY, setSummaryY] = useState(0);
@@ -446,6 +475,55 @@ export default function CartScreen() {
         {hasItems && data && (
           <>
             {isAuthenticated && <DeliverTo />}
+            <View style={styles.card}>
+              <AppText style={styles.cardTitle}>Delivery pincode</AppText>
+              <View style={shop.between}>
+                <TextInput
+                  accessibilityLabel="Delivery pincode"
+                  placeholder="6-digit pincode"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  value={postcodeDraft}
+                  onChangeText={value =>
+                    setPostcodeDraft(value.replace(/[^0-9]/g, ''))
+                  }
+                  onSubmitEditing={checkPostcode}
+                  style={{
+                    flex: 1,
+                    borderWidth: 1,
+                    borderColor: '#D1D5DB',
+                    borderRadius: 8,
+                    padding: 12,
+                    color: '#111827',
+                    marginRight: 12,
+                  }}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={checkPostcode}
+                  style={styles.deliverChange}
+                >
+                  <AppText style={styles.deliverChangeText}>Check</AppText>
+                </Pressable>
+              </View>
+              <AppText
+                accessibilityLiveRegion="polite"
+                style={styles.summaryMuted}
+              >
+                {postcodeError ||
+                  (delivery.location.isFetching
+                    ? 'Checking pincode…'
+                    : delivery.location.isError
+                    ? 'Could not check this pincode. Tap Check to retry.'
+                    : !postcode
+                    ? 'Enter your pincode for delivery charges and COD options.'
+                    : delivery.location.data?.serviceable === false
+                    ? "We don't currently deliver to this pincode."
+                    : delivery.location.data?.serviceable
+                    ? `${postcode} · Delivery available`
+                    : 'Checking delivery availability…')}
+              </AppText>
+            </View>
 
             {data.items.map(item => (
               <ItemCard
@@ -514,13 +592,61 @@ export default function CartScreen() {
               <View style={shop.between}>
                 <AppText style={styles.summaryLabel}>Delivery</AppText>
                 <AppText style={styles.summaryMuted}>
-                  Calculated at checkout
+                  {delivery.quote.isFetching || cart.isFetching
+                    ? 'Calculating…'
+                    : shippingAmount !== null
+                    ? shippingAmount === 0
+                      ? 'Free'
+                      : money(shippingAmount)
+                    : delivery.location.data?.serviceable === false
+                    ? 'Unavailable'
+                    : postcode
+                    ? 'Estimate unavailable'
+                    : 'Enter pincode for estimate'}
                 </AppText>
               </View>
               <View style={styles.payableRow}>
-                <AppText style={styles.payableLabel}>Subtotal</AppText>
                 <AppText style={styles.payableLabel}>
-                  {money(data.subtotal)}
+                  {shippingAmount !== null ? 'Estimated total' : 'Items total'}
+                </AppText>
+                <AppText style={styles.payableLabel}>
+                  {money(estimatedTotal)}
+                </AppText>
+              </View>
+              <View accessibilityLiveRegion="polite">
+                {!!postcode && (
+                  <AppText style={styles.summaryMuted}>
+                    {delivery.estimate?.estimatedDelivery?.display
+                      ? `Estimated delivery: ${delivery.estimate.estimatedDelivery.display}`
+                      : 'Delivery date confirmed at checkout'}
+                  </AppText>
+                )}
+                {delivery.estimate?.cod && (
+                  <AppText style={styles.summaryMuted}>
+                    {delivery.estimate.cod.eligible
+                      ? `COD available${
+                          delivery.estimate.cod.fee
+                            ? ` · Additional fee ${money(
+                                delivery.estimate.cod.fee,
+                              )}`
+                            : ' · No additional fee'
+                        }`
+                      : delivery.estimate.cod.code === 'CUSTOMER_RESTRICTED'
+                      ? 'Sign in to confirm COD availability'
+                      : delivery.estimate.cod.reason || 'COD unavailable'}
+                  </AppText>
+                )}
+                {delivery.estimate?.cod?.eligible &&
+                  delivery.estimate.cod.advanceEnabled && (
+                    <AppText style={styles.summaryMuted}>
+                      COD requires {delivery.estimate.cod.advancePercent}%
+                      advance payment.
+                    </AppText>
+                  )}
+                <AppText style={styles.summaryMuted}>
+                  {shippingAmount !== null
+                    ? 'Includes estimated prepaid delivery. Final total and applicable GST confirmed at checkout.'
+                    : 'Delivery charges and applicable GST confirmed at checkout.'}
                 </AppText>
               </View>
               {savings > 0 && (
@@ -590,9 +716,9 @@ export default function CartScreen() {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Subtotal ${money(
-              data.subtotal,
-            )}. View price details`}
+            accessibilityLabel={`${
+              shippingAmount !== null ? 'Estimated total' : 'Items total'
+            } ${money(estimatedTotal)}. View price details`}
             onPress={() =>
               scrollRef.current?.scrollTo({
                 y: Math.max(0, summaryY - 12),
@@ -608,8 +734,13 @@ export default function CartScreen() {
                   {money(data.mrpSubtotal)}
                 </AppText>
               )}
-              <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.bottomAmount}>
-                {money(data.subtotal)}
+              <AppText
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={styles.bottomAmount}
+              >
+                {money(estimatedTotal)}
               </AppText>
             </View>
             <View style={styles.bottomLink}>
@@ -642,7 +773,12 @@ export default function CartScreen() {
             {mutation.isPending || cart.isFetching ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : null}
-            <AppText numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={styles.ctaText}>
+            <AppText
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              style={styles.ctaText}
+            >
               {blocked
                 ? 'Fix stock issues'
                 : isAuthenticated
@@ -1055,5 +1191,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   ctaDisabled: { backgroundColor: '#9CA3AF', shadowOpacity: 0, elevation: 0 },
-  ctaText: { color: '#FFFFFF', fontFamily: theme.fonts.semibold, fontSize: 15, flexShrink: 1 },
+  ctaText: {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: 15,
+    flexShrink: 1,
+  },
 });

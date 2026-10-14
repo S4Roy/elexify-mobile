@@ -11,6 +11,8 @@ import {
   fetchReturnPolicy,
   manageCart,
 } from '../../api/cart';
+import { lookupPincode } from '../../api/address';
+import type { CartSummary } from '../../api/cart';
 import { addToWishlist } from '../../api/wishlist';
 import { useIdentity } from '../catalog/hooks';
 
@@ -83,4 +85,53 @@ export function useApplyCoupon(direct = false) {
   return useMutation({
     mutationFn: (code: string) => applyCoupon(code, direct),
   });
+}
+
+/** A separate quote keeps guest previews out of the saved-address checkout flow. */
+export function useCartDeliveryEstimate(
+  postcode: string,
+  cart: CartSummary | undefined,
+  cartRefreshing: boolean,
+) {
+  const identity = useIdentity();
+  const validPincode = /^[0-9]{6}$/.test(postcode);
+  const location = useQuery({
+    queryKey: ['cart-pincode', identity, postcode],
+    queryFn: ({ signal }) => lookupPincode(postcode, signal),
+    enabled: !!apiConfig.baseUrl && validPincode,
+    staleTime: 60_000,
+  });
+  const fingerprint = JSON.stringify([
+    cart?.subtotal,
+    cart?.items.map(item => [
+      item.id,
+      item.quantity,
+      item.price,
+      item.stockQuantity,
+    ]),
+  ]);
+  const quote = useQuery({
+    queryKey: ['cart', identity, 'delivery-estimate', postcode, fingerprint],
+    queryFn: ({ signal }) =>
+      fetchCart(false, undefined, undefined, signal, postcode),
+    enabled:
+      !!apiConfig.baseUrl &&
+      !!cart?.items.length &&
+      !cartRefreshing &&
+      validPincode &&
+      location.data?.serviceable === true,
+  });
+  return {
+    location,
+    quote,
+    estimate:
+      !cartRefreshing &&
+      !location.isFetching &&
+      !location.isError &&
+      !quote.isFetching &&
+      !quote.isError &&
+      location.data?.serviceable
+        ? quote.data
+        : undefined,
+  };
 }

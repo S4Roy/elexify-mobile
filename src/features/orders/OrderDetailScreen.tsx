@@ -48,6 +48,7 @@ import { fmtDateTime } from './trackingFormat';
 import { CancelOrderSheet } from './CancelOrderSheet';
 import { PaymentRetryCard } from './PaymentRetryCard';
 import { cancellationOutcome, refundSteps } from './cancellation';
+import { BuyAgainButton } from './BuyAgainButton';
 import { ReturnRequestSheet } from './ReturnRequestSheet';
 import { useSubmitRating } from '../product/hooks';
 
@@ -988,6 +989,7 @@ export default function OrderDetailScreen() {
               )}
             </View>
 
+            <BuyAgainButton orderId={data.id} />
             {data.returns.allowed && (
               <Button
                 label="Request return"

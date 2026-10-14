@@ -105,3 +105,27 @@ test('applying a coupon reads the coupon code from the response, falling back to
     expect.objectContaining({ code: 'WELCOME5' }),
   );
 });
+
+test('pincode previews preserve saved-address checkout and direct-cart parameters', async () => {
+  (api.get as jest.Mock).mockResolvedValue({
+    data: { data: { docs: [], shipping: { amount: 40 } } },
+  });
+  await fetchCart(false, undefined, undefined, undefined, '700001');
+  expect(api.get).toHaveBeenLastCalledWith('site/inventory/product/carts', {
+    params: { currency: 'INR', postcode: '700001' },
+    signal: undefined,
+  });
+  await fetchCart(false, 'addr-1', 'cod', undefined, '700001');
+  expect(api.get).toHaveBeenLastCalledWith('site/inventory/product/carts', {
+    params: { currency: 'INR', address_id: 'addr-1', payment_method: 'cod' },
+    signal: undefined,
+  });
+  await fetchCart(true, undefined, undefined, undefined, '700001');
+  expect(api.get).toHaveBeenLastCalledWith(
+    'site/inventory/product/temp-carts',
+    {
+      params: { currency: 'INR' },
+      signal: undefined,
+    },
+  );
+});

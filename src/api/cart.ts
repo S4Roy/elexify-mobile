@@ -138,6 +138,7 @@ export async function fetchCart(
   addressId?: string,
   paymentMethod?: 'cod' | 'razorpay',
   signal?: AbortSignal,
+  postcode?: string,
 ): Promise<CartSummary> {
   const path = direct
     ? 'site/inventory/product/temp-carts'
@@ -145,6 +146,7 @@ export async function fetchCart(
   const res = await api.get(path, {
     params: {
       currency: 'INR',
+      ...(!direct && !addressId && postcode ? { postcode } : {}),
       ...(addressId ? { address_id: addressId } : {}),
       ...(addressId && paymentMethod === 'cod'
         ? { payment_method: 'cod' }

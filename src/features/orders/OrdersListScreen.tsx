@@ -21,6 +21,7 @@ import { fmtDate, fmtDay } from './trackingFormat';
 import { QueryState } from '../catalog/QueryState';
 import { theme } from '../../theme';
 import { OrderSummary } from '../../api/order';
+import { BuyAgainButton } from './BuyAgainButton';
 import { useOrders } from './hooks';
 import { orderStatusLabel as statusLabel } from './tracking';
 
@@ -110,120 +111,125 @@ function Row({ order }: { order: OrderSummary }) {
   const open = () =>
     router.push({ pathname: '/orders/[id]', params: { id: order.id } });
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={[
-        look.text,
-        first?.name,
-        `Order ${order.orderNumber}`,
-        money(order.grandTotal),
-      ]
-        .filter(Boolean)
-        .join('. ')}
-      onPress={open}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-    >
-      <View style={[styles.statusBar, { backgroundColor: look.bg }]}>
-        <Ionicons name={look.icon} size={16} color={look.color} />
-        <AppText
-          numberOfLines={1}
-          style={[styles.statusText, { color: look.color }]}
-        >
-          {look.text}
-        </AppText>
-        <Ionicons name="chevron-forward" size={16} color={look.color} />
-      </View>
-
-      <View style={styles.product}>
-        <View>
-          <StoreImage
-            uri={first?.image ?? undefined}
-            label={first?.name ?? ''}
-            style={styles.thumb}
-          />
-          {order.previews.length > 1 && (
-            <View style={styles.moreBadge}>
-              <AppText style={styles.moreBadgeText}>
-                +{order.previews.length - 1}
-              </AppText>
-            </View>
-          )}
-        </View>
-        <View style={shop.flex}>
-          <AppText numberOfLines={2} style={styles.productName}>
-            {first?.name ??
-              `${order.totalItems} item${order.totalItems === 1 ? '' : 's'}`}
+    <View style={styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={[
+          look.text,
+          first?.name,
+          `Order ${order.orderNumber}`,
+          money(order.grandTotal),
+        ]
+          .filter(Boolean)
+          .join('. ')}
+        onPress={open}
+        style={({ pressed }) => [pressed && styles.cardPressed]}
+      >
+        <View style={[styles.statusBar, { backgroundColor: look.bg }]}>
+          <Ionicons name={look.icon} size={16} color={look.color} />
+          <AppText
+            numberOfLines={1}
+            style={[styles.statusText, { color: look.color }]}
+          >
+            {look.text}
           </AppText>
-          <AppText style={styles.productMeta}>
-            {first
-              ? more > 0
-                ? `Qty ${first.quantity} · +${more} more item${
-                    more === 1 ? '' : 's'
-                  }`
-                : `Qty ${first.quantity}`
-              : ''}
-          </AppText>
+          <Ionicons name="chevron-forward" size={16} color={look.color} />
         </View>
-      </View>
 
-      <View style={styles.footer}>
-        <View style={shop.flex}>
-          <AppText style={styles.orderNumber}>#{order.orderNumber}</AppText>
-          <AppText style={styles.footerMeta}>
-            {fmtDate(order.createdAt)} ·{' '}
-            {order.paymentMethod === 'cod'
-              ? order.isPartialCod
-                ? 'Partial COD'
-                : 'Cash on delivery'
-              : 'Paid online'}
-          </AppText>
+        <View style={styles.product}>
+          <View>
+            <StoreImage
+              uri={first?.image ?? undefined}
+              label={first?.name ?? ''}
+              style={styles.thumb}
+            />
+            {order.previews.length > 1 && (
+              <View style={styles.moreBadge}>
+                <AppText style={styles.moreBadgeText}>
+                  +{order.previews.length - 1}
+                </AppText>
+              </View>
+            )}
+          </View>
+          <View style={shop.flex}>
+            <AppText numberOfLines={2} style={styles.productName}>
+              {first?.name ??
+                `${order.totalItems} item${order.totalItems === 1 ? '' : 's'}`}
+            </AppText>
+            <AppText style={styles.productMeta}>
+              {first
+                ? more > 0
+                  ? `Qty ${first.quantity} · +${more} more item${
+                      more === 1 ? '' : 's'
+                    }`
+                  : `Qty ${first.quantity}`
+                : ''}
+            </AppText>
+          </View>
         </View>
-        <AppText style={styles.total}>{money(order.grandTotal)}</AppText>
-      </View>
 
-      {(isOngoing(status) || status === 'delivered') && (
-        <View style={styles.actions}>
-          {isOngoing(status) ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: '/orders/[id]/track',
-                  params: { id: order.id },
-                })
-              }
-              style={({ pressed }) => [
-                styles.action,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="navigate-outline"
-                size={15}
-                color={theme.colors.primary}
-              />
-              <AppText style={styles.actionText}>Track order</AppText>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              onPress={open}
-              style={({ pressed }) => [
-                styles.action,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="star-outline"
-                size={15}
-                color={theme.colors.primary}
-              />
-              <AppText style={styles.actionText}>Rate & review</AppText>
-            </Pressable>
-          )}
+        <View style={styles.footer}>
+          <View style={shop.flex}>
+            <AppText style={styles.orderNumber}>#{order.orderNumber}</AppText>
+            <AppText style={styles.footerMeta}>
+              {fmtDate(order.createdAt)} ·{' '}
+              {order.paymentMethod === 'cod'
+                ? order.isPartialCod
+                  ? 'Partial COD'
+                  : 'Cash on delivery'
+                : 'Paid online'}
+            </AppText>
+          </View>
+          <AppText style={styles.total}>{money(order.grandTotal)}</AppText>
         </View>
-      )}
-    </Pressable>
+
+        {(isOngoing(status) || status === 'delivered') && (
+          <View style={styles.actions}>
+            {isOngoing(status) ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: '/orders/[id]/track',
+                    params: { id: order.id },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.action,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="navigate-outline"
+                  size={15}
+                  color={theme.colors.primary}
+                />
+                <AppText style={styles.actionText}>Track order</AppText>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={open}
+                style={({ pressed }) => [
+                  styles.action,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="star-outline"
+                  size={15}
+                  color={theme.colors.primary}
+                />
+                <AppText style={styles.actionText}>Rate & review</AppText>
+              </Pressable>
+            )}
+          </View>
+        )}
+      </Pressable>
+      <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
+        <BuyAgainButton orderId={order.id} />
+      </View>
+    </View>
   );
 }
 
