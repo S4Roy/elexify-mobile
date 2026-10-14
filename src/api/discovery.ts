@@ -21,7 +21,8 @@ export type Category = {
   image?: string;
   hasChildren: boolean;
 };
-export type Page<T> = { items: T[]; nextPage?: number; total: number };
+// correctedQuery: the close spelling the store searched instead when the query matched nothing.
+export type Page<T> = { items: T[]; nextPage?: number; total: number; correctedQuery?: string };
 export type HomeSection = {
   id: string;
   type: string;
@@ -102,10 +103,12 @@ export function parsePage<T>(
       (totalPages !== null
         ? requestedPage < totalPages
         : items.length === limit));
+  const correctedQuery = string(data.corrected_query);
   return {
     items,
     total,
     nextPage: more && items.length > 0 ? requestedPage + 1 : undefined,
+    ...(correctedQuery ? { correctedQuery } : {}),
   };
 }
 export async function fetchProducts(

@@ -1,7 +1,8 @@
 import { useSearchVisit } from '../search/insights';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { theme } from '../../theme';
 import { AppText, Feedback } from '../../components/ui';
 import {
   BottomSheet,
@@ -65,9 +66,14 @@ function ProductResults({
       ),
     [route],
   );
+  // "Search instead for" opts out of the store's zero-result spelling fallback.
+  const exact = first(route.exact) === 'true';
   const params = useMemo(
-    () => productParams(search, filters, sort, collection),
-    [search, filters, sort, collection],
+    () => ({
+      ...productParams(search, filters, sort, collection),
+      ...(search && exact ? { exact: 'true' } : {}),
+    }),
+    [search, filters, sort, collection, exact],
   );
   const products = useProducts(params);
   const recordSearchResults = useSearchVisit(search, first(route.search_event_id), params);
@@ -76,6 +82,7 @@ function ProductResults({
       recordSearchResults(products.data.pages[0]?.total, { ...params, page: 1 });
     }
   }, [products.data, products.isSuccess, products.isPlaceholderData, products.isFetching, products.isError, params, recordSearchResults]);
+  const correctedQuery = products.data?.pages[0]?.correctedQuery;
   const items = uniqueProducts(
     products.data?.pages.flatMap(p => p.items) ?? [],
   );
@@ -95,7 +102,9 @@ function ProductResults({
     <View style={shop.page}>
       <ShopHeader
         title={
-          search ? `Results for “${search}”` : first(route.title) || 'Products'
+          search
+            ? `Results for “${correctedQuery ?? search}”`
+            : first(route.title) || 'Products'
         }
         back
       />
@@ -197,6 +206,23 @@ function ProductResults({
               }}
               skeleton={<ProductGridSkeleton withCount />}
             />
+            {!!correctedQuery && !!search && (
+              <View style={styles.corrected} accessibilityRole="summary">
+                <AppText style={styles.correctedText}>
+                  No results for “{search}”. Showing results for{' '}
+                  <AppText style={styles.correctedStrong}>“{correctedQuery}”</AppText>.
+                </AppText>
+                <Pressable
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={() =>
+                    router.setParams({ exact: 'true' })
+                  }
+                >
+                  <AppText style={shop.link}>Search for “{search}” only</AppText>
+                </Pressable>
+              </View>
+            )}
             {products.data && products.data.pages[0].total > 0 && (
               <AppText style={shop.muted}>
                 {products.data.pages[0].total} products
@@ -273,4 +299,14 @@ const styles = StyleSheet.create({
   heading: { gap: 12, marginBottom: 12 },
   active: { flexDirection: 'row', gap: 8, paddingRight: 4 },
   sortSheet: { padding: 20, gap: 10 },
+  corrected: {
+    gap: 6,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  correctedText: { fontSize: 13, lineHeight: 19, color: theme.colors.text },
+  correctedStrong: { fontFamily: theme.fonts.semibold },
 });

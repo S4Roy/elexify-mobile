@@ -139,3 +139,11 @@ test('invalid price ranges cannot reach the API', () => {
   }
   expect(priceError({ ...emptyFilters(), min: '0', max: '100' })).toBeNull();
 });
+test('passes through the spelling the store searched instead', () => {
+  expect(
+    parsePage({ docs: [product], corrected_query: 'cutter' }, parseProduct, 1, 12)
+      .correctedQuery,
+  ).toBe('cutter');
+  const plain = parsePage({ docs: [product], corrected_query: null }, parseProduct, 1, 12);
+  expect('correctedQuery' in plain).toBe(false);
+});

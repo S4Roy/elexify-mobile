@@ -134,6 +134,7 @@ export default function SearchScreen() {
     suggestions.data?.pages.flatMap(p => p.items) ?? [],
   ).slice(0, SUGGEST_LIMIT);
   const loadingFresh = suggestions.isFetching && results.length === 0;
+  const correctedQuery = suggestions.data?.pages[0]?.correctedQuery;
 
   const search = (value: string) => {
     const term = value.trim();
@@ -226,7 +227,9 @@ export default function SearchScreen() {
                   style={styles.viewAll}
                 >
                   <AppText style={shop.link}>
-                    View all results for “{query}”
+                    {correctedQuery
+                      ? `Showing results for “${correctedQuery}” · View all`
+                      : `View all results for “${query}”`}
                   </AppText>
                   <Ionicons
                     name="arrow-forward"
