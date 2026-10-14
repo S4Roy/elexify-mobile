@@ -63,7 +63,8 @@ function SuggestionRow({
       style={styles.suggestionRow}
     >
       <StoreImage
-        uri={product.image}
+        uri={product.thumbnail ?? product.image}
+        fallbackUri={product.image}
         label={product.name}
         style={styles.suggestionImage}
       />
@@ -384,7 +385,7 @@ export default function SearchScreen() {
                       }
                       style={styles.recentCard}
                     >
-                      <StoreImage uri={product.image} label={product.name} style={styles.recentImage} />
+                      <StoreImage uri={product.thumbnail ?? product.image} fallbackUri={product.image} label={product.name} style={styles.recentImage} />
                       <AppText numberOfLines={2} style={styles.recentName}>
                         {product.name}
                       </AppText>

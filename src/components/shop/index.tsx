@@ -957,22 +957,27 @@ export function SearchField({
 }
 export function StoreImage({
   uri,
+  fallbackUri,
   style,
   label,
 }: {
   uri?: string;
+  /** Loaded if `uri` is missing or fails, e.g. the full image behind a thumbnail. */
+  fallbackUri?: string;
   style: React.ComponentProps<typeof Image>['style'];
   label: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [uri]);
-  return uri && !failed ? (
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [uri, fallbackUri]);
+  const sources = [uri, fallbackUri].filter((s, i, all): s is string => !!s && all.indexOf(s) === i);
+  const current = sources[attempt];
+  return current ? (
     <Image
-      source={{ uri }}
+      source={{ uri: current }}
       accessibilityLabel={label}
       resizeMode="contain"
       style={style}
-      onError={() => setFailed(true)}
+      onError={() => setAttempt(a => a + 1)}
     />
   ) : (
     <View
@@ -1292,7 +1297,8 @@ export const ProductCard = React.memo(function ProductCard({
       <View style={shop.imageWrap}>
         <View style={shop.imageFrame}>
           <StoreImage
-            uri={product.image}
+            uri={product.thumbnail ?? product.image}
+            fallbackUri={product.image}
             label=""
             style={[shop.productImage, compact && shop.productImageCompact]}
           />

@@ -8,6 +8,8 @@ export type Product = {
   name: string;
   category: string;
   image?: string;
+  // ~400px preview for grids and lists; falls back to image when absent.
+  thumbnail?: string;
   price: number | null;
   regularPrice: number | null;
   rating: number | null;
@@ -58,6 +60,7 @@ export function parseProduct(value: unknown): Product {
     category:
       string(record(categories[0]).name) || string(record(p.category).name),
     image: imageUrl(images[0]) || imageUrl(p.image),
+    thumbnail: imageUrl(record(images[0]).thumbnail),
     price: number(p.converted_price),
     regularPrice: number(p.converted_regular_price),
     rating: number(p.avg_rating),

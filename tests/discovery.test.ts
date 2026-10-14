@@ -147,3 +147,8 @@ test('passes through the spelling the store searched instead', () => {
   const plain = parsePage({ docs: [product], corrected_query: null }, parseProduct, 1, 12);
   expect('correctedQuery' in plain).toBe(false);
 });
+test('reads the first image thumbnail when the API provides one', () => {
+  const withThumb = parseProduct({ ...product, images: [{ url: 'https://cdn.test/a.png', thumbnail: 'https://cdn.test/thumbs/a.jpg' }] });
+  expect([withThumb.image, withThumb.thumbnail]).toEqual(['https://cdn.test/a.png', 'https://cdn.test/thumbs/a.jpg']);
+  expect(parseProduct({ ...product, images: [{ url: 'https://cdn.test/a.png', thumbnail: null }] }).thumbnail).toBeUndefined();
+});
