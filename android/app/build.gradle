@@ -105,8 +105,8 @@ android {
         applicationId "com.elexify"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 19
-        versionName "1.0.18"
+        versionCode 20
+        versionName "1.0.19"
     }
     signingConfigs {
         debug {
