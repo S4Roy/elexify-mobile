@@ -3,9 +3,10 @@
     "name": "Elexify",
     "slug": "elexify-mobile",
     "scheme": "elexify",
-    "version": "1.0.19",
+    "version": "1.0.20",
     "android": {
-      "package": "com.elexify"
+      "package": "com.elexify",
+      "versionCode": 21
     }
   }
 }
